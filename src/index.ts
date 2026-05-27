@@ -7,7 +7,6 @@ import { app } from './bot/app';
 import { MeetingService } from './services/meeting';
 import { NudgeService } from './services/nudge';
 import { ConfluenceService } from './services/confluence';
-import { ClaudeService } from './services/claude';
 import { RelayService } from './bot/relay';
 import { registerCommands } from './bot/commands';
 import { registerActions } from './bot/actions';
