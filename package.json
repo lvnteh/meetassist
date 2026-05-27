@@ -1,0 +1,37 @@
+{
+  "name": "slackbot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node --watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@slack/bolt": "4.7.2",
+    "axios": "1.16.1",
+    "better-sqlite3": "12.10.0",
+    "dotenv": "17.4.2",
+    "node-cron": "4.2.1",
+    "uuid": "14.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "25.9.1",
+    "@types/node-cron": "3.0.11",
+    "@types/uuid": "10.0.0",
+    "@vitest/coverage-v8": "4.1.7",
+    "ts-node": "10.9.2",
+    "typescript": "6.0.3",
+    "vitest": "4.1.7"
+  }
+}
