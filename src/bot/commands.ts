@@ -265,10 +265,7 @@ export function registerCommands(
           });
 
           // Record the doc check
-          const { v4: uuidv4 } = await import('uuid');
-          (meetingService as any).db.prepare(
-            `INSERT INTO doc_checks (id, meeting_id, checked_at, confluence_version, comment_count) VALUES (?, ?, ?, ?, ?)`
-          ).run(uuidv4(), meetingId, new Date().toISOString(), page.version, comments.length);
+          meetingService.recordDocCheck(meetingId, page.version, comments.length);
 
         } catch (err: any) {
           await relayService.notifyOperator(`[Meetassist] Doc check failed: ${err.message}`);

@@ -160,4 +160,13 @@ export class MeetingService {
         .get(slackUserId) as Meeting | undefined) ?? null
     );
   }
+
+  recordDocCheck(meetingId: string, confluenceVersion: number, commentCount: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO doc_checks (id, meeting_id, checked_at, confluence_version, comment_count)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(uuidv4(), meetingId, new Date().toISOString(), confluenceVersion, commentCount);
+  }
 }
