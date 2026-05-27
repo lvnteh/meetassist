@@ -21,7 +21,7 @@ describe('MeetingService', () => {
     purpose: 'Align on Q3 priorities',
     document_url: 'https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Roadmap',
     document_title: 'Q3 Roadmap',
-    document_action: 'review' as const,
+    document_action: 'read' as const,
   };
 
   beforeEach(() => {

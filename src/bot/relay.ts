@@ -49,7 +49,7 @@ export class RelayService {
     await app.client.chat.postMessage({ channel: operatorId, text });
   }
 
-  registerDmListener(meetingService: MeetingService, nudgeService: NudgeService): void {
+  registerDmListener(meetingService: MeetingService): void {
     const operatorId = process.env.OPERATOR_SLACK_ID!;
 
     app.message(async ({ message }) => {
@@ -66,7 +66,7 @@ export class RelayService {
       const meeting = meetingService.getMeetingForParticipant(slackUserId);
       if (!meeting) return;
 
-      nudgeService.recordParticipantMessage({
+      this.nudgeService.recordParticipantMessage({
         user_id: user.id,
         meeting_id: meeting.id,
         nudge_id: null,

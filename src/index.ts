@@ -26,12 +26,21 @@ async function main() {
 
   registerCommands(meetingService, nudgeService, relayService, confluenceService);
   registerActions(meetingService, relayService);
-  relayService.registerDmListener(meetingService, nudgeService);
+  relayService.registerDmListener(meetingService);
 
   startScheduler(meetingService, relayService);
 
   await app.start();
   console.log('Meetassist is running');
+
+  const shutdown = async () => {
+    await app.stop();
+    db.close();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 main().catch((err) => {

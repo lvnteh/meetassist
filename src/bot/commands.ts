@@ -42,6 +42,20 @@ export function registerCommands(
         break;
       }
 
+      case 'seed-user': {
+        // /ma seed-user <slack_id> <email> <display_name...>
+        const slackId = parts[1];
+        const email = parts[2];
+        const displayName = parts.slice(3).join(' ');
+        if (!slackId || !email || !displayName) {
+          await respond({ response_type: 'ephemeral', text: 'Usage: `/ma seed-user <slack_id> <email> <display name>`' });
+          return;
+        }
+        const user = meetingService.upsertUser({ slack_user_id: slackId, email, display_name: displayName });
+        await respond({ response_type: 'ephemeral', text: `Meetassist: User seeded — ${user.display_name} (${user.slack_user_id})` });
+        break;
+      }
+
       case 'list': {
         const meetings = meetingService.listActive();
         if (meetings.length === 0) {
@@ -279,6 +293,7 @@ export function registerCommands(
           text: [
             'Meetassist commands:',
             '`/ma create` — create a new meeting',
+            '`/ma seed-user <id> <email> <name>` — register a user',
             '`/ma list` — list active meetings',
             '`/ma status [id]` — participant state',
             '`/ma send [id]` — send pre-meeting nudge',
@@ -321,21 +336,32 @@ export function registerCommands(
         session.step = 'document_url';
         await say('Paste the Confluence page URL:');
         break;
-      case 'document_url':
-        session.document_url = text;
-        session.step = 'document_title';
-        await say('What is the document title?');
-        break;
+      case 'document_url': {
+          if (!text.match(/\/pages\/\d+/)) {
+            await say('Could not find a Confluence page ID in that URL. Expected format: `https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Title`\n\nPlease paste the URL again:');
+            return;
+          }
+          session.document_url = text;
+          session.step = 'document_title';
+          await say('What is the document title?');
+          break;
+        }
       case 'document_title':
         session.document_title = text;
         session.step = 'document_action';
         await say('What action is required from participants?\n`read` | `comment` | `approve` | `provide_input` | `confirm_decision`');
         break;
-      case 'document_action':
-        session.document_action = text;
-        session.step = 'participants';
-        await say('List participant Slack IDs, comma-separated (e.g. `U001,U002,U003`):');
-        break;
+      case 'document_action': {
+          const validActions = ['read', 'comment', 'approve', 'provide_input', 'confirm_decision'];
+          if (!validActions.includes(text)) {
+            await say(`Invalid action. Please choose one of:\n\`read\` | \`comment\` | \`approve\` | \`provide_input\` | \`confirm_decision\``);
+            return;
+          }
+          session.document_action = text;
+          session.step = 'participants';
+          await say('List participant Slack IDs, comma-separated (e.g. `U001,U002,U003`):');
+          break;
+        }
       case 'participants': {
         session.participants = text.split(',').map((s) => s.trim());
         createSessions.delete(msg.user);
@@ -356,17 +382,23 @@ export function registerCommands(
           document_action: session.document_action as DocumentAction,
         });
 
+        const unknownIds: string[] = [];
         for (const slackId of session.participants!) {
           const user = meetingService.getUserBySlackId(slackId);
           if (user) {
             meetingService.addParticipant(meeting.id, user.id, 'participant');
+          } else {
+            unknownIds.push(slackId);
           }
         }
 
         meetingService.updateStatus(meeting.id, 'active');
 
+        const unknownWarning = unknownIds.length > 0
+          ? `\n⚠️ Unknown IDs skipped (seed them first): ${unknownIds.join(', ')}`
+          : '';
         await say(
-          `Meetassist: Meeting created.\n*${meeting.title}* — \`${meeting.id.slice(0, 8)}\`\nParticipants added. Use \`/ma send ${meeting.id.slice(0, 8)}\` to send nudges.`
+          `Meetassist: Meeting created.\n*${meeting.title}* — \`${meeting.id.slice(0, 8)}\`\nParticipants added. Use \`/ma send ${meeting.id.slice(0, 8)}\` to send nudges.${unknownWarning}`
         );
         break;
       }

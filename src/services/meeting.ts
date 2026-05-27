@@ -5,7 +5,10 @@ import type { Meeting, MeetingParticipant, User, DocumentAction, ParticipantRole
 function parseConfluencePageId(url: string): string {
   // Handles URLs like: https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Title
   const match = url.match(/\/pages\/(\d+)/);
-  return match ? match[1] : '';
+  if (!match) {
+    throw new Error(`Cannot parse Confluence page ID from URL: ${url}. Expected format: .../pages/123456/...`);
+  }
+  return match[1];
 }
 
 interface CreateMeetingInput {
