@@ -157,7 +157,8 @@ export class MeetingService {
     return rows[0] ?? null;
   }
 
-  async listOpenForParticipant(userId: string): Promise<MeetingWithParticipantStatus[]> {
+  /** Lists meetings where the participant has open work (status != 'completed' and meeting active/draft). Takes the internal `users.id`, not the Slack user ID. */
+  async listOpenForParticipant(internalUserId: string): Promise<MeetingWithParticipantStatus[]> {
     const { rows } = await this.pool.query(
       `SELECT m.*, mp.status as participant_status
        FROM meetings m
@@ -166,7 +167,7 @@ export class MeetingService {
          AND mp.status != 'completed'
          AND m.status IN ('draft','active')
        ORDER BY m.start_time ASC`,
-      [userId]
+      [internalUserId]
     );
     return rows;
   }
