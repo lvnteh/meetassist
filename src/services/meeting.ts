@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import type { WebClient } from '@slack/web-api';
-import type { Meeting, MeetingParticipant, User, DocumentAction, ParticipantRole, ParticipantStatus } from '../types';
+import type { Meeting, MeetingParticipant, User, DocumentAction, ParticipantRole, ParticipantStatus, MeetingWithParticipantStatus } from '../types';
 
 function parseConfluencePageId(url: string): string {
   const match = url.match(/\/pages\/(\d+)/);
@@ -155,6 +155,20 @@ export class MeetingService {
       [slackUserId]
     );
     return rows[0] ?? null;
+  }
+
+  async listOpenForParticipant(userId: string): Promise<MeetingWithParticipantStatus[]> {
+    const { rows } = await this.pool.query(
+      `SELECT m.*, mp.status as participant_status
+       FROM meetings m
+       JOIN meeting_participants mp ON mp.meeting_id = m.id
+       WHERE mp.user_id = $1
+         AND mp.status != 'completed'
+         AND m.status IN ('draft','active')
+       ORDER BY m.start_time ASC`,
+      [userId]
+    );
+    return rows;
   }
 
   async recordDocCheck(meetingId: string, confluenceVersion: number, commentCount: number): Promise<void> {

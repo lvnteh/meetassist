@@ -58,4 +58,23 @@ describe('MeetingService', () => {
     const result = await service.upsertUser({ slack_user_id: 'U001', email: 'a@b.com', display_name: 'Alice' });
     expect(result.slack_user_id).toBe('U001');
   });
+
+  it('listOpenForParticipant returns meetings joined with participant status', async () => {
+    const rows = [
+      { id: 'mtg-1', title: 'Roadmap', participant_status: 'nudge_sent', start_time: '2026-06-01T09:00:00Z' },
+      { id: 'mtg-2', title: 'Review', participant_status: 'pending', start_time: '2026-06-02T09:00:00Z' },
+    ];
+    const pool = makePool(rows);
+    const service = new MeetingService(pool);
+
+    const result = await service.listOpenForParticipant('user-1');
+    expect(result).toHaveLength(2);
+    expect(result[0].participant_status).toBe('nudge_sent');
+
+    const sql = pool.query.mock.calls[0][0];
+    expect(sql).toContain('meeting_participants');
+    expect(sql).toContain("status != 'completed'");
+    expect(sql).toContain("status IN ('draft','active')");
+    expect(pool.query.mock.calls[0][1]).toEqual(['user-1']);
+  });
 });
