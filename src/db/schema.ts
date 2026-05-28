@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
+import type { Pool } from 'pg';
 
-export function createTables(db: Database.Database): void {
-  db.exec(`
+export async function createTables(pool: Pool): Promise<void> {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL,

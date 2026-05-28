@@ -5,7 +5,6 @@ import type { RelayService } from './relay';
 import type { ConfluenceService } from '../services/confluence';
 import type { DocumentAction } from '../types';
 
-// Guided create flow: store in-progress meeting creation state per operator
 const createSessions = new Map<string, Partial<{
   title: string;
   start_time: string;
@@ -26,9 +25,9 @@ export function registerCommands(
   app.command('/ma', async ({ ack, command, respond }) => {
     await ack();
 
-    const operatorId = process.env.OPERATOR_SLACK_ID!;
-    if (command.user_id !== operatorId) {
-      await respond({ response_type: 'ephemeral', text: 'Meetassist: Only the operator can use /ma commands.' });
+    const operatorIds = (process.env.OPERATOR_SLACK_IDS ?? process.env.OPERATOR_SLACK_ID ?? '').split(',').map(s => s.trim());
+    if (!operatorIds.includes(command.user_id)) {
+      await respond({ response_type: 'ephemeral', text: 'Meetassist: Only operators can use /ma commands.' });
       return;
     }
 
@@ -47,7 +46,6 @@ export function registerCommands(
       }
 
       case 'seed-user': {
-        // /ma seed-user <slack_id> <email> <display_name...>
         const slackId = parts[1];
         const email = parts[2];
         const displayName = parts.slice(3).join(' ');
@@ -55,13 +53,14 @@ export function registerCommands(
           await respond({ response_type: 'ephemeral', text: 'Usage: `/ma seed-user <slack_id> <email> <display name>`' });
           return;
         }
-        const user = meetingService.upsertUser({ slack_user_id: slackId, email, display_name: displayName });
+        const user = await meetingService.upsertUser({ slack_user_id: slackId, email, display_name: displayName });
         await respond({ response_type: 'ephemeral', text: `Meetassist: User seeded — ${user.display_name} (${user.slack_user_id})` });
         break;
       }
 
       case 'list': {
-        const meetings = meetingService.listActive();
+        const operatorUser = await meetingService.getUserBySlackId(command.user_id);
+        const meetings = await meetingService.listActive(operatorUser?.id);
         if (meetings.length === 0) {
           await respond({ response_type: 'ephemeral', text: 'Meetassist: No active meetings.' });
           return;
@@ -72,13 +71,13 @@ export function registerCommands(
       }
 
       case 'status': {
-        const meetingId = resolveMeetingId(parts[1], meetingService);
+        const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
         if (!meetingId) {
           await respond({ response_type: 'ephemeral', text: 'Meetassist: Meeting not found. Use /ma list to see IDs.' });
           return;
         }
-        const meeting = meetingService.getById(meetingId)!;
-        const participants = meetingService.getParticipantsWithUsers(meetingId);
+        const meeting = (await meetingService.getById(meetingId))!;
+        const participants = await meetingService.getParticipantsWithUsers(meetingId);
         const lines = participants.map(
           (p) => `• ${p.display_name} (<@${p.slack_user_id}>) — *${p.status}* (reminders: ${p.reminder_count})`
         );
@@ -90,13 +89,13 @@ export function registerCommands(
       }
 
       case 'send': {
-        const meetingId = resolveMeetingId(parts[1], meetingService);
+        const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
         if (!meetingId) {
           await respond({ response_type: 'ephemeral', text: 'Meetassist: Meeting not found.' });
           return;
         }
-        const meeting = meetingService.getById(meetingId)!;
-        const participants = meetingService.getParticipantsWithUsers(meetingId).filter(
+        const meeting = (await meetingService.getById(meetingId))!;
+        const participants = (await meetingService.getParticipantsWithUsers(meetingId)).filter(
           (p) => p.status === 'pending'
         );
 
@@ -115,14 +114,14 @@ export function registerCommands(
               text,
               blocks,
             });
-            nudgeService.recordNudge({
+            await nudgeService.recordNudge({
               user_id: p.user_id,
               meeting_id: meetingId,
               slack_channel_id: channel,
               message_ts: ts,
               type: 'pre_meeting',
             });
-            meetingService.updateParticipantStatus(meetingId, p.user_id, 'nudge_sent');
+            await meetingService.updateParticipantStatus(meetingId, p.user_id, 'nudge_sent');
             sent++;
           } catch (err: any) {
             console.error(`[send] Failed for ${p.slack_user_id}:`, err?.data ?? err?.message ?? err);
@@ -135,13 +134,13 @@ export function registerCommands(
       }
 
       case 'remind': {
-        const meetingId = resolveMeetingId(parts[1], meetingService);
+        const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
         if (!meetingId) {
           await respond({ response_type: 'ephemeral', text: 'Meetassist: Meeting not found.' });
           return;
         }
-        const meeting = meetingService.getById(meetingId)!;
-        const participants = meetingService.getParticipantsWithUsers(meetingId).filter(
+        const meeting = (await meetingService.getById(meetingId))!;
+        const participants = (await meetingService.getParticipantsWithUsers(meetingId)).filter(
           (p) => p.status === 'nudge_sent' || p.status === 'replied'
         );
 
@@ -153,18 +152,15 @@ export function registerCommands(
         const text = nudgeService.buildReminderMessage(meeting);
         let sent = 0;
         for (const p of participants) {
-          const { channel, ts } = await relayService.sendToParticipant({
-            slackUserId: p.slack_user_id,
-            text,
-          });
-          nudgeService.recordNudge({
+          const { channel, ts } = await relayService.sendToParticipant({ slackUserId: p.slack_user_id, text });
+          await nudgeService.recordNudge({
             user_id: p.user_id,
             meeting_id: meetingId,
             slack_channel_id: channel,
             message_ts: ts,
             type: 'reminder',
           });
-          meetingService.incrementReminderCount(meetingId, p.user_id);
+          await meetingService.incrementReminderCount(meetingId, p.user_id);
           sent++;
         }
         await respond({ response_type: 'ephemeral', text: `Meetassist: Reminder sent to ${sent} participant(s).` });
@@ -172,13 +168,13 @@ export function registerCommands(
       }
 
       case 'followup': {
-        const meetingId = resolveMeetingId(parts[1], meetingService);
+        const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
         if (!meetingId) {
           await respond({ response_type: 'ephemeral', text: 'Meetassist: Meeting not found.' });
           return;
         }
-        const meeting = meetingService.getById(meetingId)!;
-        const participants = meetingService.getParticipantsWithUsers(meetingId).filter(
+        const meeting = (await meetingService.getById(meetingId))!;
+        const participants = (await meetingService.getParticipantsWithUsers(meetingId)).filter(
           (p) => p.status !== 'completed'
         );
 
@@ -190,11 +186,8 @@ export function registerCommands(
         const text = nudgeService.buildFollowUpMessage(meeting);
         let sent = 0;
         for (const p of participants) {
-          const { channel, ts } = await relayService.sendToParticipant({
-            slackUserId: p.slack_user_id,
-            text,
-          });
-          nudgeService.recordNudge({
+          const { channel, ts } = await relayService.sendToParticipant({ slackUserId: p.slack_user_id, text });
+          await nudgeService.recordNudge({
             user_id: p.user_id,
             meeting_id: meetingId,
             slack_channel_id: channel,
@@ -208,7 +201,6 @@ export function registerCommands(
       }
 
       case 'reply': {
-        // /ma reply @handle message text here
         const handleRaw = parts[1];
         const messageText = parts.slice(2).join(' ');
         if (!handleRaw || !messageText) {
@@ -216,9 +208,8 @@ export function registerCommands(
           return;
         }
         const handle = handleRaw.replace(/^@/, '');
-        // Look up by display_name or slack_user_id
-        const user = meetingService.getUserBySlackId(handle) ??
-          lookupByDisplayName(handle, meetingService, meetingService.listActive());
+        const user = await meetingService.getUserBySlackId(handle) ??
+          await lookupByDisplayName(handle, command.user_id, meetingService);
         if (!user) {
           await respond({ response_type: 'ephemeral', text: `Meetassist: Could not find user "${handle}". Check display name or Slack ID.` });
           return;
@@ -229,23 +220,22 @@ export function registerCommands(
       }
 
       case 'check-doc': {
-        const meetingId = resolveMeetingId(parts[1], meetingService);
+        const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
         if (!meetingId) {
           await respond({ response_type: 'ephemeral', text: 'Meetassist: Meeting not found.' });
           return;
         }
-        const meeting = meetingService.getById(meetingId)!;
+        const meeting = (await meetingService.getById(meetingId))!;
         await respond({ response_type: 'ephemeral', text: `Meetassist: Fetching doc for *${meeting.title}*...` });
 
         try {
           const page = await confluenceService.getPage(meeting.confluence_page_id);
           const comments = await confluenceService.getComments(meeting.confluence_page_id);
-          const participants = meetingService.getParticipantsWithUsers(meetingId);
+          const participants = await meetingService.getParticipantsWithUsers(meetingId);
           const participantEmails = participants.map((p) => p.email).filter(Boolean);
 
           const summary = confluenceService.buildDocCheckSummary(page, comments, participantEmails);
 
-          // Build suggested nudges with Yes/Skip buttons
           const missing = participants.filter((p) => {
             const commentEmails = new Set(comments.map((c) => c.authorEmail));
             return !commentEmails.has(p.email);
@@ -289,8 +279,7 @@ export function registerCommands(
             blocks: nudgeBlocks as any,
           });
 
-          // Record the doc check
-          meetingService.recordDocCheck(meetingId, page.version, comments.length);
+          await meetingService.recordDocCheck(meetingId, page.version, comments.length);
 
         } catch (err: any) {
           await relayService.notifyOperator(`[Meetassist] Doc check failed: ${err.message}`);
@@ -318,13 +307,12 @@ export function registerCommands(
     }
   });
 
-  // Guided create flow — listen to operator DM messages during a create session
   app.message(async ({ message, say }) => {
     const msg = message as any;
     if (!msg.user || msg.channel_type !== 'im') return;
 
-    const operatorId = process.env.OPERATOR_SLACK_ID!;
-    if (msg.user !== operatorId) return;
+    const operatorIds = (process.env.OPERATOR_SLACK_IDS ?? process.env.OPERATOR_SLACK_ID ?? '').split(',').map(s => s.trim());
+    if (!operatorIds.includes(msg.user)) return;
 
     const session = createSessions.get(msg.user);
     if (!session) return;
@@ -348,42 +336,42 @@ export function registerCommands(
         await say('Paste the Confluence page URL:');
         break;
       case 'document_url': {
-          if (!text.match(/\/pages\/\d+/)) {
-            await say('Could not find a Confluence page ID in that URL. Expected format: `https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Title`\n\nPlease paste the URL again:');
-            return;
-          }
-          session.document_url = text;
-          session.step = 'document_title';
-          await say('What is the document title?');
-          break;
+        if (!text.match(/\/pages\/\d+/)) {
+          await say('Could not find a Confluence page ID in that URL. Expected format: `https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Title`\n\nPlease paste the URL again:');
+          return;
         }
+        session.document_url = text;
+        session.step = 'document_title';
+        await say('What is the document title?');
+        break;
+      }
       case 'document_title':
         session.document_title = text;
         session.step = 'document_action';
         await say('What action is required from participants?\n`read` | `comment` | `approve` | `provide_input` | `confirm_decision`');
         break;
       case 'document_action': {
-          const validActions = ['read', 'comment', 'approve', 'provide_input', 'confirm_decision'];
-          if (!validActions.includes(text)) {
-            await say(`Invalid action. Please choose one of:\n\`read\` | \`comment\` | \`approve\` | \`provide_input\` | \`confirm_decision\``);
-            return;
-          }
-          session.document_action = text;
-          session.step = 'participants';
-          await say('List participant Slack IDs, comma-separated (e.g. `U001,U002,U003`):');
-          break;
+        const validActions = ['read', 'comment', 'approve', 'provide_input', 'confirm_decision'];
+        if (!validActions.includes(text)) {
+          await say('Invalid action. Please choose one of:\n`read` | `comment` | `approve` | `provide_input` | `confirm_decision`');
+          return;
         }
+        session.document_action = text;
+        session.step = 'participants';
+        await say('List participant Slack IDs, comma-separated (e.g. `U001,U002,U003`):');
+        break;
+      }
       case 'participants': {
         session.participants = text.split(',').map((s) => s.trim());
         createSessions.delete(msg.user);
 
-        const operatorUser = meetingService.getUserBySlackId(operatorId);
+        const operatorUser = await meetingService.getUserBySlackId(msg.user);
         if (!operatorUser) {
           await say('Error: Operator user not found in DB. Restart the bot to auto-seed.');
           return;
         }
 
-        const meeting = meetingService.createMeeting({
+        const meeting = await meetingService.createMeeting({
           title: session.title!,
           start_time: session.start_time!,
           organizer_user_id: operatorUser.id,
@@ -397,14 +385,14 @@ export function registerCommands(
         for (const slackId of session.participants!) {
           try {
             const user = await meetingService.autoSeedFromSlack(slackId, app.client);
-            meetingService.addParticipant(meeting.id, user.id, 'participant');
+            await meetingService.addParticipant(meeting.id, user.id, 'participant');
           } catch (err: any) {
             console.error(`[autoSeed] Failed for ${slackId}:`, err?.data ?? err?.message ?? err);
             failedIds.push(slackId);
           }
         }
 
-        meetingService.updateStatus(meeting.id, 'active');
+        await meetingService.updateStatus(meeting.id, 'active');
 
         const failedWarning = failedIds.length > 0
           ? `\n⚠️ Could not look up these IDs (check they're valid Slack IDs): ${failedIds.join(', ')}`
@@ -418,20 +406,23 @@ export function registerCommands(
   });
 }
 
-function resolveMeetingId(idPrefix: string | undefined, service: MeetingService): string | null {
+async function resolveMeetingId(idPrefix: string | undefined, operatorSlackId: string, service: MeetingService): Promise<string | null> {
   if (!idPrefix) return null;
-  const all = service.listActive();
+  const operatorUser = await service.getUserBySlackId(operatorSlackId);
+  const all = await service.listActive(operatorUser?.id);
   const match = all.find((m) => m.id.startsWith(idPrefix));
   return match?.id ?? null;
 }
 
-function lookupByDisplayName(
+async function lookupByDisplayName(
   name: string,
-  service: MeetingService,
-  meetings: ReturnType<MeetingService['listActive']>
-): ReturnType<MeetingService['getUserBySlackId']> {
+  operatorSlackId: string,
+  service: MeetingService
+): Promise<ReturnType<MeetingService['getUserBySlackId']> extends Promise<infer T> ? T : never> {
+  const operatorUser = await service.getUserBySlackId(operatorSlackId);
+  const meetings = await service.listActive(operatorUser?.id);
   for (const meeting of meetings) {
-    const participants = service.getParticipantsWithUsers(meeting.id);
+    const participants = await service.getParticipantsWithUsers(meeting.id);
     const found = participants.find(
       (p) => p.display_name.toLowerCase().replace(/\s+/g, '.') === name.toLowerCase()
     );

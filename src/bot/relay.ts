@@ -54,26 +54,25 @@ export class RelayService {
 
     app.message(async ({ message }) => {
       const msg = message as any;
-      // Only handle DMs, not from operator, not from the bot itself
       if (!msg.user || msg.channel_type !== 'im' || msg.user === operatorId || msg.bot_id) return;
 
       const slackUserId: string = msg.user;
       const text: string = msg.text ?? '';
 
-      const user = meetingService.getUserBySlackId(slackUserId);
+      const user = await meetingService.getUserBySlackId(slackUserId);
       if (!user) return;
 
-      const meeting = meetingService.getMeetingForParticipant(slackUserId);
+      const meeting = await meetingService.getMeetingForParticipant(slackUserId);
       if (!meeting) return;
 
-      this.nudgeService.recordParticipantMessage({
+      await this.nudgeService.recordParticipantMessage({
         user_id: user.id,
         meeting_id: meeting.id,
         nudge_id: null,
         raw_text: text,
       });
 
-      meetingService.updateParticipantStatus(meeting.id, user.id, 'replied');
+      await meetingService.updateParticipantStatus(meeting.id, user.id, 'replied');
 
       await this.forwardToOperator({
         senderSlackId: slackUserId,

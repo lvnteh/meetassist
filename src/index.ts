@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { db } from './db/client';
+import { pool } from './db/client';
 import { createTables } from './db/schema';
 import { app } from './bot/app';
 import { MeetingService } from './services/meeting';
@@ -13,10 +13,10 @@ import { registerActions } from './bot/actions';
 import { startScheduler } from './scheduler/cron';
 
 async function main() {
-  createTables(db);
+  await createTables(pool);
 
-  const meetingService = new MeetingService(db);
-  const nudgeService = new NudgeService(db);
+  const meetingService = new MeetingService(pool);
+  const nudgeService = new NudgeService(pool);
   const confluenceService = new ConfluenceService({
     baseUrl: process.env.CONFLUENCE_BASE_URL!,
     email: process.env.CONFLUENCE_EMAIL!,
@@ -33,7 +33,6 @@ async function main() {
   await app.start();
 
   await meetingService.autoSeedFromSlack(process.env.OPERATOR_SLACK_ID!, app.client).catch(() => {
-    // fallback if Slack lookup fails
     meetingService.upsertUser({
       slack_user_id: process.env.OPERATOR_SLACK_ID!,
       email: process.env.CONFLUENCE_EMAIL!,
@@ -45,7 +44,7 @@ async function main() {
 
   const shutdown = async () => {
     await app.stop();
-    db.close();
+    await pool.end();
     process.exit(0);
   };
 

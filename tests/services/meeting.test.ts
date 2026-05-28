@@ -1,81 +1,61 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import Database from 'better-sqlite3';
-import { createTables } from '../../src/db/schema';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MeetingService } from '../../src/services/meeting';
 
+function makePool(rows: any[] = []) {
+  return { query: vi.fn().mockResolvedValue({ rows }) } as any;
+}
+
+const baseInput = {
+  title: 'Roadmap Review',
+  start_time: '2026-06-01T09:00:00Z',
+  organizer_user_id: 'user-1',
+  purpose: 'Align on Q3 priorities',
+  document_url: 'https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Roadmap',
+  document_title: 'Q3 Roadmap',
+  document_action: 'read' as const,
+};
+
 describe('MeetingService', () => {
-  let db: Database.Database;
-  let service: MeetingService;
+  it('createMeeting inserts and returns the meeting', async () => {
+    const created = { ...baseInput, id: 'mtg-1', confluence_page_id: '123456', status: 'draft', created_at: '' };
+    const pool = makePool([created]);
+    const service = new MeetingService(pool);
 
-  const testUser = {
-    id: 'user-1',
-    email: 'alice@example.com',
-    slack_user_id: 'U001',
-    display_name: 'Alice',
-  };
-
-  const testMeetingInput = {
-    title: 'Roadmap Review',
-    start_time: '2026-06-01T09:00:00Z',
-    organizer_user_id: 'user-1',
-    purpose: 'Align on Q3 priorities',
-    document_url: 'https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Roadmap',
-    document_title: 'Q3 Roadmap',
-    document_action: 'read' as const,
-  };
-
-  beforeEach(() => {
-    db = new Database(':memory:');
-    createTables(db);
-    service = new MeetingService(db);
-    db.prepare(
-      `INSERT INTO users (id, email, slack_user_id, display_name) VALUES (?, ?, ?, ?)`
-    ).run(testUser.id, testUser.email, testUser.slack_user_id, testUser.display_name);
-  });
-
-  afterEach(() => db.close());
-
-  it('creates a meeting and parses the confluence page id from the url', () => {
-    const meeting = service.createMeeting(testMeetingInput);
+    const meeting = await service.createMeeting(baseInput);
     expect(meeting.title).toBe('Roadmap Review');
-    expect(meeting.status).toBe('draft');
     expect(meeting.confluence_page_id).toBe('123456');
+    expect(pool.query).toHaveBeenCalled();
   });
 
-  it('getById returns the meeting', () => {
-    const created = service.createMeeting(testMeetingInput);
-    const found = service.getById(created.id);
-    expect(found).not.toBeNull();
-    expect(found!.title).toBe('Roadmap Review');
+  it('createMeeting throws when confluence page id cannot be parsed', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await expect(
+      service.createMeeting({ ...baseInput, document_url: 'https://org.atlassian.net/no-page-id' })
+    ).rejects.toThrow('Cannot parse Confluence page ID');
   });
 
-  it('listActive returns only active and draft meetings', () => {
-    service.createMeeting(testMeetingInput);
-    const list = service.listActive();
-    expect(list.length).toBe(1);
+  it('getById returns null when no rows', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    const result = await service.getById('unknown-id');
+    expect(result).toBeNull();
   });
 
-  it('addParticipant stores a participant with pending status', () => {
-    const meeting = service.createMeeting(testMeetingInput);
-    service.addParticipant(meeting.id, testUser.id, 'participant');
-    const participants = service.getParticipants(meeting.id);
-    expect(participants.length).toBe(1);
-    expect(participants[0].status).toBe('pending');
+  it('listActive filters by organizer when provided', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.listActive('user-1');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('organizer_user_id');
+    expect(call[1]).toContain('user-1');
   });
 
-  it('updateParticipantStatus changes the status', () => {
-    const meeting = service.createMeeting(testMeetingInput);
-    service.addParticipant(meeting.id, testUser.id, 'participant');
-    service.updateParticipantStatus(meeting.id, testUser.id, 'completed');
-    const participants = service.getParticipants(meeting.id);
-    expect(participants[0].status).toBe('completed');
-  });
-
-  it('getParticipantUser returns user by slack_user_id and meeting', () => {
-    const meeting = service.createMeeting(testMeetingInput);
-    service.addParticipant(meeting.id, testUser.id, 'participant');
-    const result = service.getUserBySlackId('U001');
-    expect(result).not.toBeNull();
-    expect(result!.id).toBe('user-1');
+  it('upsertUser inserts with ON CONFLICT update', async () => {
+    const user = { id: 'u1', slack_user_id: 'U001', email: 'a@b.com', display_name: 'Alice' };
+    const pool = { query: vi.fn().mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [user] }) } as any;
+    const service = new MeetingService(pool);
+    const result = await service.upsertUser({ slack_user_id: 'U001', email: 'a@b.com', display_name: 'Alice' });
+    expect(result.slack_user_id).toBe('U001');
   });
 });

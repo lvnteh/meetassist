@@ -6,15 +6,14 @@ export function startScheduler(
   meetingService: MeetingService,
   relayService: RelayService
 ): void {
-  // Every hour: mark overdue participants
   cron.schedule('0 * * * *', async () => {
     const now = new Date().toISOString();
-    const meetings = meetingService.listActive();
+    const meetings = await meetingService.listActive();
 
     for (const meeting of meetings) {
-      if (meeting.start_time > now) continue; // meeting hasn't started yet
+      if (meeting.start_time > now) continue;
 
-      const participants = meetingService.getParticipantsWithUsers(meeting.id);
+      const participants = await meetingService.getParticipantsWithUsers(meeting.id);
       const overdue = participants.filter(
         (p) => p.status === 'nudge_sent' || p.status === 'pending'
       );
@@ -22,7 +21,7 @@ export function startScheduler(
       if (overdue.length === 0) continue;
 
       for (const p of overdue) {
-        meetingService.updateParticipantStatus(meeting.id, p.user_id, 'overdue');
+        await meetingService.updateParticipantStatus(meeting.id, p.user_id, 'overdue');
       }
 
       const names = overdue.map((p) => `<@${p.slack_user_id}>`).join(', ');
@@ -32,14 +31,13 @@ export function startScheduler(
     }
   });
 
-  // Daily digest at 08:00
   cron.schedule('0 8 * * *', async () => {
-    const meetings = meetingService.listActive();
+    const meetings = await meetingService.listActive();
     if (meetings.length === 0) return;
 
     const lines: string[] = ['*Meetassist Daily Digest*'];
     for (const meeting of meetings) {
-      const participants = meetingService.getParticipantsWithUsers(meeting.id);
+      const participants = await meetingService.getParticipantsWithUsers(meeting.id);
       const completed = participants.filter((p) => p.status === 'completed').length;
       const total = participants.length;
       const blocked = participants.filter((p) => p.status === 'blocked').length;

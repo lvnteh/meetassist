@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import type { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import type { Meeting, Nudge, NudgeType, ParticipantMessage } from '../types';
 
@@ -31,18 +31,18 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export class NudgeService {
-  constructor(private db: Database.Database) {}
+  constructor(private pool: Pool) {}
 
-  recordNudge(input: NudgeInput): Nudge {
+  async recordNudge(input: NudgeInput): Promise<Nudge> {
     const id = uuidv4();
     const sent_at = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO nudges (id, user_id, meeting_id, slack_channel_id, message_ts, type, sent_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      )
-      .run(id, input.user_id, input.meeting_id, input.slack_channel_id, input.message_ts, input.type, sent_at);
-    return this.db.prepare(`SELECT * FROM nudges WHERE id = ?`).get(id) as Nudge;
+    await this.pool.query(
+      `INSERT INTO nudges (id, user_id, meeting_id, slack_channel_id, message_ts, type, sent_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, input.user_id, input.meeting_id, input.slack_channel_id, input.message_ts, input.type, sent_at]
+    );
+    const { rows } = await this.pool.query(`SELECT * FROM nudges WHERE id = $1`, [id]);
+    return rows[0];
   }
 
   buildPreMeetingMessage(meeting: Meeting): SlackMessage {
@@ -101,25 +101,24 @@ export class NudgeService {
     return `Meetassist follow-up: ${meeting.title} has passed. Your action is still open: ${actionLabel.toLowerCase()}.\n\nDocument: ${meeting.document_title}\n${meeting.document_url}`;
   }
 
-  recordParticipantMessage(input: ParticipantMessageInput): ParticipantMessage {
+  async recordParticipantMessage(input: ParticipantMessageInput): Promise<ParticipantMessage> {
     const id = uuidv4();
     const created_at = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO participant_messages (id, user_id, meeting_id, nudge_id, raw_text, ai_classification, created_at)
-         VALUES (?, ?, ?, ?, ?, NULL, ?)`
-      )
-      .run(id, input.user_id, input.meeting_id, input.nudge_id, input.raw_text, created_at);
-    return this.db.prepare(`SELECT * FROM participant_messages WHERE id = ?`).get(id) as ParticipantMessage;
+    await this.pool.query(
+      `INSERT INTO participant_messages (id, user_id, meeting_id, nudge_id, raw_text, ai_classification, created_at)
+       VALUES ($1,$2,$3,$4,$5,NULL,$6)`,
+      [id, input.user_id, input.meeting_id, input.nudge_id, input.raw_text, created_at]
+    );
+    const { rows } = await this.pool.query(`SELECT * FROM participant_messages WHERE id = $1`, [id]);
+    return rows[0];
   }
 
-  recordOperatorReply(participantMessageId: string, rawText: string): void {
+  async recordOperatorReply(participantMessageId: string, rawText: string): Promise<void> {
     const id = uuidv4();
     const sent_at = new Date().toISOString();
-    this.db
-      .prepare(
-        `INSERT INTO operator_replies (id, participant_message_id, raw_text, sent_at) VALUES (?, ?, ?, ?)`
-      )
-      .run(id, participantMessageId, rawText, sent_at);
+    await this.pool.query(
+      `INSERT INTO operator_replies (id, participant_message_id, raw_text, sent_at) VALUES ($1,$2,$3,$4)`,
+      [id, participantMessageId, rawText, sent_at]
+    );
   }
 }
