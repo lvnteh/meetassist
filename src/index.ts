@@ -33,12 +33,14 @@ async function main() {
   await app.start();
 
   const operatorIds = (process.env.OPERATOR_SLACK_IDS ?? process.env.OPERATOR_SLACK_ID ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  console.log(`[boot] Seeding ${operatorIds.length} operator(s):`, operatorIds);
   for (const operatorId of operatorIds) {
-    await meetingService.autoSeedFromSlack(operatorId, app.client).catch(() => {
-      meetingService.upsertUser({
+    await meetingService.autoSeedFromSlack(operatorId, app.client).catch((err) => {
+      console.error(`[boot] Slack lookup failed for ${operatorId}, using fallback:`, err?.message);
+      return meetingService.upsertUser({
         slack_user_id: operatorId,
         email: process.env.CONFLUENCE_EMAIL!,
-        display_name: process.env.OPERATOR_NAME!,
+        display_name: process.env.OPERATOR_NAME ?? operatorId,
       });
     });
   }
