@@ -219,6 +219,27 @@ export function registerCommands(
         break;
       }
 
+      case 'set-action': {
+        const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
+        if (!meetingId) {
+          await respond({ response_type: 'ephemeral', text: 'Meetassist: Meeting not found.' });
+          return;
+        }
+        const validActions = ['read', 'comment', 'approve', 'provide_input', 'confirm_decision'];
+        const newAction = parts[2];
+        if (!newAction || !validActions.includes(newAction)) {
+          await respond({ response_type: 'ephemeral', text: `Usage: \`/ma set-action <id> <action>\`\nValid actions: ${validActions.join(', ')}` });
+          return;
+        }
+        await meetingService.updateAction(meetingId, newAction);
+        const participants = await meetingService.getParticipantsWithUsers(meetingId);
+        for (const p of participants) {
+          await meetingService.updateParticipantStatus(meetingId, p.user_id, 'pending');
+        }
+        await respond({ response_type: 'ephemeral', text: `Meetassist: Action updated to \`${newAction}\`. All participants reset to pending. Use \`/ma send ${parts[1]}\` to send the new nudge.` });
+        break;
+      }
+
       case 'check-doc': {
         const meetingId = await resolveMeetingId(parts[1], command.user_id, meetingService);
         if (!meetingId) {
@@ -299,6 +320,7 @@ export function registerCommands(
             '`/ma send [id]` — send pre-meeting nudge',
             '`/ma remind [id]` — remind non-completers',
             '`/ma followup [id]` — post-meeting follow-up',
+            '`/ma set-action [id] <action>` — change required action and re-open for nudging',
             '`/ma check-doc [id]` — fetch and summarise Confluence doc',
             '`/ma reply @handle message` — reply to a participant as bot',
           ].join('\n'),
