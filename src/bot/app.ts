@@ -1,7 +1,4 @@
 import { App } from '@slack/bolt';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 export const app = new App({
   token: process.env.SLACK_BOT_TOKEN!,
