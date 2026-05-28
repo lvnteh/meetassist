@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
+import type { WebClient } from '@slack/web-api';
 import type { Meeting, MeetingParticipant, User, DocumentAction, ParticipantRole, ParticipantStatus } from '../types';
 
 function parseConfluencePageId(url: string): string {
@@ -171,5 +172,17 @@ export class MeetingService {
          VALUES (?, ?, ?, ?, ?)`
       )
       .run(uuidv4(), meetingId, new Date().toISOString(), confluenceVersion, commentCount);
+  }
+
+  async autoSeedFromSlack(slackUserId: string, client: WebClient): Promise<User> {
+    const existing = this.getUserBySlackId(slackUserId);
+    if (existing) return existing;
+
+    const result = await client.users.info({ user: slackUserId });
+    const profile = (result.user as any)?.profile;
+    const displayName: string = profile?.real_name || profile?.display_name || slackUserId;
+    const confluenceEmail: string = profile?.email ?? '';
+
+    return this.upsertUser({ slack_user_id: slackUserId, email: confluenceEmail, display_name: displayName });
   }
 }

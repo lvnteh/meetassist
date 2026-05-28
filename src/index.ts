@@ -31,6 +31,16 @@ async function main() {
   startScheduler(meetingService, relayService);
 
   await app.start();
+
+  await meetingService.autoSeedFromSlack(process.env.OPERATOR_SLACK_ID!, app.client).catch(() => {
+    // fallback if Slack lookup fails
+    meetingService.upsertUser({
+      slack_user_id: process.env.OPERATOR_SLACK_ID!,
+      email: process.env.CONFLUENCE_EMAIL!,
+      display_name: process.env.OPERATOR_NAME!,
+    });
+  });
+
   console.log('Meetassist is running');
 
   const shutdown = async () => {

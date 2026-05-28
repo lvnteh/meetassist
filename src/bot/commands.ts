@@ -38,7 +38,11 @@ export function registerCommands(
     switch (sub) {
       case 'create': {
         createSessions.set(command.user_id, { step: 'title' });
-        await respond({ response_type: 'ephemeral', text: 'Meetassist: Let\'s create a meeting.\n\nWhat is the *meeting title*?' });
+        await app.client.chat.postMessage({
+          channel: command.user_id,
+          text: 'Meetassist: Let\'s create a meeting. Reply here in this DM.\n\nWhat is the *meeting title*?',
+        });
+        await respond({ response_type: 'ephemeral', text: 'Meetassist: Started in your DM with me.' });
         break;
       }
 
@@ -103,23 +107,30 @@ export function registerCommands(
 
         const { text, blocks } = nudgeService.buildPreMeetingMessage(meeting);
         let sent = 0;
+        const errors: string[] = [];
         for (const p of participants) {
-          const { channel, ts } = await relayService.sendBlocksToParticipant({
-            slackUserId: p.slack_user_id,
-            text,
-            blocks,
-          });
-          nudgeService.recordNudge({
-            user_id: p.user_id,
-            meeting_id: meetingId,
-            slack_channel_id: channel,
-            message_ts: ts,
-            type: 'pre_meeting',
-          });
-          meetingService.updateParticipantStatus(meetingId, p.user_id, 'nudge_sent');
-          sent++;
+          try {
+            const { channel, ts } = await relayService.sendBlocksToParticipant({
+              slackUserId: p.slack_user_id,
+              text,
+              blocks,
+            });
+            nudgeService.recordNudge({
+              user_id: p.user_id,
+              meeting_id: meetingId,
+              slack_channel_id: channel,
+              message_ts: ts,
+              type: 'pre_meeting',
+            });
+            meetingService.updateParticipantStatus(meetingId, p.user_id, 'nudge_sent');
+            sent++;
+          } catch (err: any) {
+            console.error(`[send] Failed for ${p.slack_user_id}:`, err?.data ?? err?.message ?? err);
+            errors.push(`<@${p.slack_user_id}> (${err?.data?.error ?? err?.message ?? 'unknown'})`);
+          }
         }
-        await respond({ response_type: 'ephemeral', text: `Meetassist: Pre-meeting nudge sent to ${sent} participant(s).` });
+        const errorNote = errors.length > 0 ? `\n⚠️ Failed to send to: ${errors.join(', ')}` : '';
+        await respond({ response_type: 'ephemeral', text: `Meetassist: Pre-meeting nudge sent to ${sent} participant(s).${errorNote}` });
         break;
       }
 
@@ -368,7 +379,7 @@ export function registerCommands(
 
         const operatorUser = meetingService.getUserBySlackId(operatorId);
         if (!operatorUser) {
-          await say('Error: Operator user not found in DB. Use `/ma seed-user` first.');
+          await say('Error: Operator user not found in DB. Restart the bot to auto-seed.');
           return;
         }
 
@@ -382,23 +393,24 @@ export function registerCommands(
           document_action: session.document_action as DocumentAction,
         });
 
-        const unknownIds: string[] = [];
+        const failedIds: string[] = [];
         for (const slackId of session.participants!) {
-          const user = meetingService.getUserBySlackId(slackId);
-          if (user) {
+          try {
+            const user = await meetingService.autoSeedFromSlack(slackId, app.client);
             meetingService.addParticipant(meeting.id, user.id, 'participant');
-          } else {
-            unknownIds.push(slackId);
+          } catch (err: any) {
+            console.error(`[autoSeed] Failed for ${slackId}:`, err?.data ?? err?.message ?? err);
+            failedIds.push(slackId);
           }
         }
 
         meetingService.updateStatus(meeting.id, 'active');
 
-        const unknownWarning = unknownIds.length > 0
-          ? `\n⚠️ Unknown IDs skipped (seed them first): ${unknownIds.join(', ')}`
+        const failedWarning = failedIds.length > 0
+          ? `\n⚠️ Could not look up these IDs (check they're valid Slack IDs): ${failedIds.join(', ')}`
           : '';
         await say(
-          `Meetassist: Meeting created.\n*${meeting.title}* — \`${meeting.id.slice(0, 8)}\`\nParticipants added. Use \`/ma send ${meeting.id.slice(0, 8)}\` to send nudges.${unknownWarning}`
+          `Meetassist: Meeting created.\n*${meeting.title}* — \`${meeting.id.slice(0, 8)}\`\nParticipants added. Use \`/ma send ${meeting.id.slice(0, 8)}\` to send nudges.${failedWarning}`
         );
         break;
       }

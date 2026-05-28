@@ -84,13 +84,6 @@ export class NudgeService {
             style: 'danger',
             value: meeting.id,
           },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: 'Open document' },
-            action_id: 'open_document',
-            url: meeting.document_url,
-            value: meeting.id,
-          },
         ],
       },
     ];

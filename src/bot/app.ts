@@ -9,3 +9,7 @@ export const app = new App({
   signingSecret: process.env.SLACK_SIGNING_SECRET!,
   socketMode: true,
 });
+
+app.error(async (error) => {
+  console.error('[Bolt error]', error);
+});
