@@ -32,13 +32,16 @@ async function main() {
 
   await app.start();
 
-  await meetingService.autoSeedFromSlack(process.env.OPERATOR_SLACK_ID!, app.client).catch(() => {
-    meetingService.upsertUser({
-      slack_user_id: process.env.OPERATOR_SLACK_ID!,
-      email: process.env.CONFLUENCE_EMAIL!,
-      display_name: process.env.OPERATOR_NAME!,
+  const operatorIds = (process.env.OPERATOR_SLACK_IDS ?? process.env.OPERATOR_SLACK_ID ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  for (const operatorId of operatorIds) {
+    await meetingService.autoSeedFromSlack(operatorId, app.client).catch(() => {
+      meetingService.upsertUser({
+        slack_user_id: operatorId,
+        email: process.env.CONFLUENCE_EMAIL!,
+        display_name: process.env.OPERATOR_NAME!,
+      });
     });
-  });
+  }
 
   console.log('Meetassist is running');
 
