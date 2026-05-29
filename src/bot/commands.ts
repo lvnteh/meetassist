@@ -17,6 +17,12 @@ const createSessions = new Map<string, Partial<{
   step: string;
 }>>();
 
+export function unwrapSlackUrl(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(/^<(https?:\/\/[^|>]+)(?:\|[^>]*)?>$/);
+  return match ? match[1] : trimmed;
+}
+
 export function registerCommands(
   meetingService: MeetingService,
   nudgeService: NudgeService,
@@ -376,11 +382,12 @@ export function registerCommands(
         await say('Paste the Confluence page URL:');
         break;
       case 'document_url': {
-        if (!text.match(/\/pages\/\d+/)) {
+        const cleanedUrl = unwrapSlackUrl(text);
+        if (!cleanedUrl.match(/\/pages\/\d+/)) {
           await say('Could not find a Confluence page ID in that URL. Expected format: `https://org.atlassian.net/wiki/spaces/PROJ/pages/123456/Title`\n\nPlease paste the URL again:');
           return;
         }
-        session.document_url = text;
+        session.document_url = cleanedUrl;
         session.step = 'document_title';
         await say('What is the document title?');
         break;

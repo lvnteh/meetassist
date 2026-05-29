@@ -87,6 +87,13 @@ function formatStartTime(iso: string): string {
   return `${wd} ${mo} ${day} · ${hh}:${mm}`;
 }
 
+function cleanUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  const match = trimmed.match(/^<(https?:\/\/[^|>]+)(?:\|[^>]*)?>$/);
+  return match ? match[1] : trimmed;
+}
+
 function statusClass(status: ParticipantStatus): string {
   switch (status) {
     case 'completed': return 'status-done';
@@ -136,7 +143,7 @@ function renderMeeting(m: DashboardMeeting, now: Date): string {
     </header>
     <div class="meta">
       <div class="meta-row"><span class="meta-label">Starts</span><span class="meta-value">${escapeHtml(formatStartTime(m.start_time))}</span></div>
-      <div class="meta-row"><span class="meta-label">Document</span><span class="meta-value"><a href="${escapeHtml(m.document_url)}" target="_blank" rel="noopener">${escapeHtml(m.document_title)}</a></span></div>
+      <div class="meta-row"><span class="meta-label">Document</span><span class="meta-value"><a href="${escapeHtml(cleanUrl(m.document_url))}" target="_blank" rel="noopener">${escapeHtml(m.document_title)}</a></span></div>
       <div class="meta-row"><span class="meta-label">Action</span><span class="meta-value">${escapeHtml(humaniseAction(m.document_action))}</span></div>
 ${purposeRow}      <div class="meta-row"><span class="meta-label">Progress</span><span class="meta-value">${escapeHtml(progressText)}</span></div>
     </div>
