@@ -11,6 +11,7 @@ import { RelayService } from './bot/relay';
 import { registerCommands } from './bot/commands';
 import { registerActions } from './bot/actions';
 import { startScheduler } from './scheduler/cron';
+import { configureDashboard } from './services/dashboard';
 
 async function main() {
   await createTables(pool);
@@ -23,6 +24,17 @@ async function main() {
     apiToken: process.env.CONFLUENCE_API_TOKEN!,
   });
   const relayService = new RelayService(meetingService, nudgeService);
+
+  const dashboardPageId = process.env.MEETASSIST_DASHBOARD_PAGE_ID ?? '';
+  if (!dashboardPageId) {
+    console.warn('[boot] MEETASSIST_DASHBOARD_PAGE_ID not set — dashboard publishing disabled.');
+  }
+  configureDashboard({
+    pageId: dashboardPageId,
+    meetingService,
+    nudgeService,
+    confluenceService,
+  });
 
   registerCommands(meetingService, nudgeService, relayService, confluenceService);
   registerActions(meetingService, relayService);
