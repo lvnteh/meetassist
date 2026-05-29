@@ -1,6 +1,7 @@
 import { app } from './app';
 import type { MeetingService } from '../services/meeting';
 import type { NudgeService } from '../services/nudge';
+import { publishDashboard } from '../services/dashboard';
 
 export class RelayService {
   constructor(
@@ -79,6 +80,8 @@ export class RelayService {
         text,
         meetingTitle: meeting.title,
       });
+
+      await publishDashboard();
     });
   }
 }
