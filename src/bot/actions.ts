@@ -1,8 +1,6 @@
 import { app } from './app';
 import type { MeetingService } from '../services/meeting';
 import type { RelayService } from './relay';
-import { publishHomeViews } from './home';
-import { getOperatorIds } from './roles';
 
 export function registerActions(
   meetingService: MeetingService,
@@ -28,7 +26,6 @@ export function registerActions(
         `[Meetassist] <@${slackUserId}> marked *${meeting.title}* as done.`
       );
     }
-    await publishHomeViews([slackUserId, ...getOperatorIds()]);
   });
 
   app.action('need_clarification', async ({ ack, body, action }) => {
@@ -51,7 +48,6 @@ export function registerActions(
         `[Meetassist] <@${slackUserId}> needs clarification on *${meeting.title}*.\n\nReply: \`/ma reply @${slackUserId} <your message>\``
       );
     }
-    await publishHomeViews([slackUserId, ...getOperatorIds()]);
   });
 
   app.action('cannot_complete', async ({ ack, body, action }) => {
@@ -74,7 +70,6 @@ export function registerActions(
         `[Meetassist] <@${slackUserId}> cannot complete *${meeting.title}*.\n\nReply: \`/ma reply @${slackUserId} <your message>\``
       );
     }
-    await publishHomeViews([slackUserId, ...getOperatorIds()]);
   });
 
   app.action('open_document', async ({ ack }) => {

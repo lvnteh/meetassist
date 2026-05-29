@@ -93,7 +93,3 @@ export interface ConfluencePage {
   lastModifiedAt: string;
   bodyText: string;
 }
-
-export interface MeetingWithParticipantStatus extends Meeting {
-  participant_status: ParticipantStatus;
-}
