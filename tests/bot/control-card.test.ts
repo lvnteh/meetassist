@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { buildControlCardBlocks, progressSignature } from '../../src/bot/control-card';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  buildControlCardBlocks,
+  progressSignature,
+  postControlCard,
+  updateControlCard,
+} from '../../src/bot/control-card';
 
 const baseMeeting = {
   id: 'abcd1234-5678-90ef',
@@ -86,5 +91,83 @@ describe('progressSignature', () => {
 
   it('handles empty participants', () => {
     expect(progressSignature([])).toBe('0/0/0');
+  });
+});
+
+describe('postControlCard', () => {
+  it('posts a card and persists channel + ts + progress signature', async () => {
+    const client = { chat: { postMessage: vi.fn().mockResolvedValue({ ok: true, ts: '1700000000.000100' }) } } as any;
+    const meetingService = {
+      getParticipantsWithUsers: vi.fn().mockResolvedValue([
+        { user_id: 'u1', slack_user_id: 'U1', display_name: 'A', status: 'completed', meeting_id: 'm', role: 'participant', reminder_count: 0, completed_at: null, email: 'a' },
+        { user_id: 'u2', slack_user_id: 'U2', display_name: 'B', status: 'pending', meeting_id: 'm', role: 'participant', reminder_count: 0, completed_at: null, email: 'b' },
+      ]),
+      setControlMessage: vi.fn().mockResolvedValue(undefined),
+      setLastCardProgress: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await postControlCard(client, meetingService, baseMeeting, 'C123');
+
+    expect(client.chat.postMessage).toHaveBeenCalledOnce();
+    const arg = client.chat.postMessage.mock.calls[0][0];
+    expect(arg.channel).toBe('C123');
+    expect(Array.isArray(arg.blocks)).toBe(true);
+    expect(meetingService.setControlMessage).toHaveBeenCalledWith(baseMeeting.id, 'C123', '1700000000.000100');
+    expect(meetingService.setLastCardProgress).toHaveBeenCalledWith(baseMeeting.id, '1/2/0');
+  });
+
+  it('skips persistence when postMessage returns no ts', async () => {
+    const client = { chat: { postMessage: vi.fn().mockResolvedValue({ ok: false }) } } as any;
+    const meetingService = {
+      getParticipantsWithUsers: vi.fn().mockResolvedValue([]),
+      setControlMessage: vi.fn(),
+      setLastCardProgress: vi.fn(),
+    } as any;
+    await postControlCard(client, meetingService, baseMeeting, 'C123');
+    expect(meetingService.setControlMessage).not.toHaveBeenCalled();
+    expect(meetingService.setLastCardProgress).not.toHaveBeenCalled();
+  });
+});
+
+describe('updateControlCard', () => {
+  it('skips when meeting has no stored channel/ts', async () => {
+    const client = { chat: { update: vi.fn() } } as any;
+    const meetingService = {
+      getParticipantsWithUsers: vi.fn(),
+      setLastCardProgress: vi.fn(),
+    } as any;
+    await updateControlCard(client, meetingService, baseMeeting);
+    expect(client.chat.update).not.toHaveBeenCalled();
+  });
+
+  it('updates the message and persists new progress signature', async () => {
+    const client = { chat: { update: vi.fn().mockResolvedValue({ ok: true }) } } as any;
+    const meetingService = {
+      getParticipantsWithUsers: vi.fn().mockResolvedValue([
+        { user_id: 'u1', slack_user_id: 'U1', display_name: 'A', status: 'completed', meeting_id: 'm', role: 'participant', reminder_count: 0, completed_at: null, email: 'a' },
+      ]),
+      setLastCardProgress: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    const m = { ...baseMeeting, control_channel_id: 'C9', control_message_ts: '1.2' };
+    await updateControlCard(client, meetingService, m);
+    expect(client.chat.update).toHaveBeenCalledOnce();
+    const arg = client.chat.update.mock.calls[0][0];
+    expect(arg.channel).toBe('C9');
+    expect(arg.ts).toBe('1.2');
+    expect(meetingService.setLastCardProgress).toHaveBeenCalledWith(m.id, '1/1/0');
+  });
+
+  it('logs and swallows chat.update errors', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const client = { chat: { update: vi.fn().mockRejectedValue(new Error('boom')) } } as any;
+    const meetingService = {
+      getParticipantsWithUsers: vi.fn().mockResolvedValue([]),
+      setLastCardProgress: vi.fn(),
+    } as any;
+    const m = { ...baseMeeting, control_channel_id: 'C9', control_message_ts: '1.2' };
+    await expect(updateControlCard(client, meetingService, m)).resolves.toBeUndefined();
+    expect(consoleErr).toHaveBeenCalled();
+    expect(meetingService.setLastCardProgress).not.toHaveBeenCalled();
+    consoleErr.mockRestore();
   });
 });

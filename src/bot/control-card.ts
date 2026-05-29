@@ -1,4 +1,6 @@
+import type { WebClient } from '@slack/web-api';
 import type { Meeting, MeetingParticipant, ParticipantStatus } from '../types';
+import type { MeetingService } from '../services/meeting';
 import { humaniseAction } from '../services/dashboard';
 
 type ParticipantLike = MeetingParticipant & {
@@ -145,4 +147,46 @@ export function buildControlCardBlocks(
   }
 
   return blocks;
+}
+
+export async function postControlCard(
+  client: WebClient,
+  meetingService: MeetingService,
+  meeting: Meeting,
+  channelId: string,
+): Promise<void> {
+  const participants = await meetingService.getParticipantsWithUsers(meeting.id);
+  const blocks = buildControlCardBlocks(meeting, participants);
+  const result = await client.chat.postMessage({
+    channel: channelId,
+    blocks,
+    text: `Meeting: ${meeting.title}`,
+  });
+  if (result.ts) {
+    await meetingService.setControlMessage(meeting.id, channelId, result.ts);
+    await meetingService.setLastCardProgress(meeting.id, progressSignature(participants));
+  }
+}
+
+export async function updateControlCard(
+  client: WebClient,
+  meetingService: MeetingService,
+  meeting: Meeting,
+): Promise<void> {
+  const channelId = (meeting as any).control_channel_id;
+  const ts = (meeting as any).control_message_ts;
+  if (!channelId || !ts) return;
+  const participants = await meetingService.getParticipantsWithUsers(meeting.id);
+  const blocks = buildControlCardBlocks(meeting, participants);
+  try {
+    await client.chat.update({
+      channel: channelId,
+      ts,
+      blocks,
+      text: `Meeting: ${meeting.title}`,
+    });
+    await meetingService.setLastCardProgress(meeting.id, progressSignature(participants));
+  } catch (err: any) {
+    console.error('[control-card] update failed:', err?.message ?? err);
+  }
 }
