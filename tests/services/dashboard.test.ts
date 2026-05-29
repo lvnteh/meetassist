@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
-import { relativeTime, escapeXml, humaniseStatus, humaniseAction, renderDashboardBody, configureDashboard, publishDashboard } from '../../src/services/dashboard';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { promises as fs } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { relativeTime, humaniseStatus, humaniseAction, renderDashboardBody, configureDashboard, publishDashboard } from '../../src/services/dashboard';
 
 describe('relativeTime', () => {
   const now = new Date('2026-05-29T10:00:00Z');
@@ -24,24 +27,6 @@ describe('relativeTime', () => {
 
   it('returns "Xw ago" for weeks', () => {
     expect(relativeTime(new Date('2026-05-22T10:00:00Z'), now)).toBe('1w ago');
-  });
-});
-
-describe('escapeXml', () => {
-  it('escapes <, >, &, ", and \'', () => {
-    expect(escapeXml(`<script>alert("x" & 'y')</script>`)).toBe(
-      '&lt;script&gt;alert(&quot;x&quot; &amp; &apos;y&apos;)&lt;/script&gt;'
-    );
-  });
-
-  it('returns empty string for null or undefined', () => {
-    expect(escapeXml(null)).toBe('');
-    expect(escapeXml(undefined)).toBe('');
-  });
-
-  it('strips C0 control characters that are invalid in XML 1.0', () => {
-    expect(escapeXml('a\x00b\x07c\x1Fd')).toBe('abcd');
-    expect(escapeXml('hello\tworld\nfoo')).toBe('hello\tworld\nfoo');
   });
 });
 
@@ -78,10 +63,10 @@ describe('humaniseAction', () => {
 describe('renderDashboardBody — empty state', () => {
   const now = new Date('2026-05-29T10:30:00Z');
 
-  it('renders the info macro and a "No active meetings" message', () => {
+  it('renders a header and a no-meetings message', () => {
     const body = renderDashboardBody({ meetings: [], now });
 
-    expect(body).toContain('<ac:structured-macro ac:name="info">');
+    expect(body).toContain('# Meetassist dashboard');
     expect(body).toContain('Last updated:');
     expect(body).toContain('No active meetings');
   });
@@ -126,17 +111,13 @@ describe('renderDashboardBody — populated', () => {
   it('renders meeting heading, metadata, progress, and a participant table', () => {
     const body = renderDashboardBody({ meetings: [meeting], now });
 
-    expect(body).toContain('<h2>Take Template Ownership</h2>');
-    expect(body).toContain('Action requested: approve');
-    expect(body).toContain('Progress: 1/3 done · 1 blocked');
+    expect(body).toContain('## Take Template Ownership');
+    expect(body).toContain('**Action requested:** approve');
+    expect(body).toContain('**Progress:** 1/3 done · 1 blocked');
 
-    expect(body).toContain('<ac:link><ri:url ri:value="https://example.atlassian.net/wiki/spaces/X/pages/12345/Page" /><ac:link-body>Take Template Ownership</ac:link-body></ac:link>');
+    expect(body).toContain('[Take Template Ownership](https://example.atlassian.net/wiki/spaces/X/pages/12345/Page)');
 
-    expect(body).toContain('<th>Participant</th>');
-    expect(body).toContain('<th>Status</th>');
-    expect(body).toContain('<th>Last updated</th>');
-    expect(body).toContain('<th>Reply</th>');
-
+    expect(body).toContain('| Participant | Status | Last updated | Reply |');
     expect(body).toContain('@alice');
     expect(body).toContain('done');
     expect(body).toContain('2h ago');
@@ -158,42 +139,71 @@ describe('renderDashboardBody — populated', () => {
 
     const body = renderDashboardBody({ meetings: [noBlocked], now });
 
-    expect(body).toContain('Progress: 1/2 done');
+    expect(body).toContain('**Progress:** 1/2 done');
     expect(body).not.toContain('blocked');
   });
 
-  it('escapes user-supplied text to prevent storage-format injection', () => {
-    const malicious = {
+  it('escapes pipe characters in user-supplied text so the table stays valid', () => {
+    const m = {
       ...meeting,
-      title: '<script>alert(1)</script>',
       participants: [
-        { ...meeting.participants[0], display_name: 'x<y', latest_reply: 'a & b' },
+        { ...meeting.participants[0], display_name: 'a|b', latest_reply: 'x | y' },
       ],
     };
 
-    const body = renderDashboardBody({ meetings: [malicious], now });
+    const body = renderDashboardBody({ meetings: [m], now });
 
-    expect(body).not.toContain('<script>alert(1)</script>');
-    expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
-    expect(body).toContain('@x&lt;y');
-    expect(body).toContain('a &amp; b');
+    expect(body).toContain('@a\\|b');
+    expect(body).toContain('x \\| y');
+  });
+
+  it('renders the meeting purpose as a metadata line', () => {
+    const body = renderDashboardBody({ meetings: [meeting], now });
+
+    expect(body).toContain('**Purpose:** Decide on the new template format');
+  });
+
+  it('omits the purpose line when purpose is empty', () => {
+    const m = { ...meeting, purpose: '' };
+    const body = renderDashboardBody({ meetings: [m], now });
+
+    expect(body).not.toContain('**Purpose:**');
+  });
+
+  it('separates multiple meetings with horizontal rules', () => {
+    const second = { ...meeting, id: 'mtg-2', title: 'Second Meeting' };
+    const body = renderDashboardBody({ meetings: [meeting, second], now });
+
+    expect(body).toContain('## Take Template Ownership');
+    expect(body).toContain('## Second Meeting');
+    expect(body).toContain('\n---\n');
   });
 });
 
 describe('publishDashboard', () => {
-  it('is a no-op when page id is empty', async () => {
+  let tmpDir: string;
+  let tmpFile: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-test-'));
+    tmpFile = path.join(tmpDir, 'dashboard.md');
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('is a no-op when filePath is empty', async () => {
     const meetingService = { listActive: vi.fn() } as any;
     const nudgeService = { getLatestReply: vi.fn() } as any;
-    const confluenceService = { updatePage: vi.fn() } as any;
 
-    configureDashboard({ pageId: '', meetingService, nudgeService, confluenceService });
+    configureDashboard({ filePath: '', meetingService, nudgeService });
     await publishDashboard();
 
     expect(meetingService.listActive).not.toHaveBeenCalled();
-    expect(confluenceService.updatePage).not.toHaveBeenCalled();
   });
 
-  it('fetches meetings + participants + replies, renders, and updates the page', async () => {
+  it('fetches meetings + participants + replies and writes the markdown file', async () => {
     const meeting = {
       id: 'mtg-1',
       title: 'M',
@@ -217,16 +227,8 @@ describe('publishDashboard', () => {
     const nudgeService = {
       getLatestReply: vi.fn().mockResolvedValue('hello'),
     } as any;
-    const confluenceService = {
-      updatePage: vi.fn().mockResolvedValue(undefined),
-    } as any;
 
-    configureDashboard({
-      pageId: '12345',
-      meetingService,
-      nudgeService,
-      confluenceService,
-    });
+    configureDashboard({ filePath: tmpFile, meetingService, nudgeService });
 
     await publishDashboard();
 
@@ -234,30 +236,21 @@ describe('publishDashboard', () => {
     expect(meetingService.getParticipantsWithUsers).toHaveBeenCalledWith('mtg-1');
     expect(nudgeService.getLatestReply).toHaveBeenCalledWith('mtg-1', 'user-1');
 
-    expect(confluenceService.updatePage).toHaveBeenCalledTimes(1);
-    const [pageId, title, body] = confluenceService.updatePage.mock.calls[0];
-    expect(pageId).toBe('12345');
-    expect(title).toBe('Meetassist dashboard');
-    expect(body).toContain('@alice');
-    expect(body).toContain('hello');
+    const written = await fs.readFile(tmpFile, 'utf8');
+    expect(written).toContain('# Meetassist dashboard');
+    expect(written).toContain('@alice');
+    expect(written).toContain('hello');
+    expect(written).toContain('**Purpose:** do the thing');
   });
 
-  it('catches and logs errors from updatePage without throwing', async () => {
+  it('catches and logs errors from the underlying calls without throwing', async () => {
     const meetingService = {
-      listActive: vi.fn().mockResolvedValue([]),
+      listActive: vi.fn().mockRejectedValue(new Error('boom')),
       getParticipantsWithUsers: vi.fn(),
     } as any;
     const nudgeService = { getLatestReply: vi.fn() } as any;
-    const confluenceService = {
-      updatePage: vi.fn().mockRejectedValue(new Error('boom')),
-    } as any;
 
-    configureDashboard({
-      pageId: '12345',
-      meetingService,
-      nudgeService,
-      confluenceService,
-    });
+    configureDashboard({ filePath: tmpFile, meetingService, nudgeService });
 
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(publishDashboard()).resolves.toBeUndefined();

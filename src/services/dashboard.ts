@@ -1,7 +1,7 @@
+import { promises as fs } from 'fs';
 import type { ParticipantStatus, DocumentAction } from '../types';
 import type { MeetingService } from './meeting';
 import type { NudgeService } from './nudge';
-import type { ConfluenceService } from './confluence';
 
 export function relativeTime(from: Date, now: Date = new Date()): string {
   const diffMs = now.getTime() - from.getTime();
@@ -15,17 +15,6 @@ export function relativeTime(from: Date, now: Date = new Date()): string {
   if (day < 7) return `${day}d ago`;
   const wk = Math.floor(day / 7);
   return `${wk}w ago`;
-}
-
-export function escapeXml(value: string | null | undefined): string {
-  if (value == null) return '';
-  return value
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
 
 const STATUS_LABELS: Record<ParticipantStatus, string> = {
@@ -78,15 +67,9 @@ export interface DashboardInput {
   now: Date;
 }
 
-function renderHeader(now: Date): string {
-  const stamp = now.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
-  return [
-    '<ac:structured-macro ac:name="info">',
-    '  <ac:rich-text-body>',
-    `    <p>Last updated: ${escapeXml(stamp)}</p>`,
-    '  </ac:rich-text-body>',
-    '</ac:structured-macro>',
-  ].join('\n');
+function escapeMd(value: string | null | undefined): string {
+  if (value == null) return '';
+  return value.replace(/\|/g, '\\|').replace(/\n/g, ' ').replace(/\r/g, '');
 }
 
 function formatStartTime(iso: string): string {
@@ -104,57 +87,59 @@ function renderMeeting(m: DashboardMeeting, now: Date): string {
   const done = m.participants.filter((p) => p.status === 'completed').length;
   const total = m.participants.length;
   const blocked = m.participants.filter((p) => p.status === 'blocked').length;
-
   const progress = blocked > 0
-    ? `Progress: ${done}/${total} done · ${blocked} blocked`
-    : `Progress: ${done}/${total} done`;
+    ? `${done}/${total} done · ${blocked} blocked`
+    : `${done}/${total} done`;
 
-  const rows = m.participants.map((p) => {
-    const updated = p.updated_at ? relativeTime(new Date(p.updated_at), now) : '—';
-    return [
-      '    <tr>',
-      `      <td>@${escapeXml(p.display_name)}</td>`,
-      `      <td>${escapeXml(humaniseStatus(p.status))}</td>`,
-      `      <td>${escapeXml(updated)}</td>`,
-      `      <td>${escapeXml(p.latest_reply ?? '')}</td>`,
-      '    </tr>',
-    ].join('\n');
-  }).join('\n');
+  const lines: string[] = [];
+  lines.push(`## ${m.title}`);
+  lines.push('');
+  lines.push(`- **Starts:** ${formatStartTime(m.start_time)} · \`${idPrefix}\``);
+  lines.push(`- **Document:** [${escapeMd(m.document_title)}](${m.document_url})`);
+  lines.push(`- **Action requested:** ${humaniseAction(m.document_action)}`);
+  if (m.purpose && m.purpose.trim() !== '') {
+    lines.push(`- **Purpose:** ${escapeMd(m.purpose)}`);
+  }
+  lines.push(`- **Progress:** ${progress}`);
+  lines.push('');
 
-  return [
-    `<h2>${escapeXml(m.title)}</h2>`,
-    `<p>${escapeXml(formatStartTime(m.start_time))} · ${escapeXml(idPrefix)}</p>`,
-    `<p>Document: <ac:link><ri:url ri:value="${escapeXml(m.document_url)}" /><ac:link-body>${escapeXml(m.document_title)}</ac:link-body></ac:link></p>`,
-    `<p>Action requested: ${escapeXml(humaniseAction(m.document_action))}</p>`,
-    `<p>${escapeXml(progress)}</p>`,
-    '<table>',
-    '  <tbody>',
-    '    <tr>',
-    '      <th>Participant</th>',
-    '      <th>Status</th>',
-    '      <th>Last updated</th>',
-    '      <th>Reply</th>',
-    '    </tr>',
-    rows,
-    '  </tbody>',
-    '</table>',
-  ].join('\n');
+  if (m.participants.length === 0) {
+    lines.push('_No participants._');
+  } else {
+    lines.push('| Participant | Status | Last updated | Reply |');
+    lines.push('|---|---|---|---|');
+    for (const p of m.participants) {
+      const updated = p.updated_at ? relativeTime(new Date(p.updated_at), now) : '—';
+      lines.push(
+        `| @${escapeMd(p.display_name)} | ${escapeMd(humaniseStatus(p.status))} | ${escapeMd(updated)} | ${escapeMd(p.latest_reply ?? '')} |`
+      );
+    }
+  }
+
+  return lines.join('\n');
 }
 
 export function renderDashboardBody(input: DashboardInput): string {
-  const header = renderHeader(input.now);
+  const stamp = input.now.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  const header = [
+    '# Meetassist dashboard',
+    '',
+    `_Last updated: ${stamp}_`,
+    '',
+  ].join('\n');
+
   if (input.meetings.length === 0) {
-    return [header, '', '<p><em>No active meetings.</em></p>'].join('\n');
+    return `${header}\n_No active meetings._\n`;
   }
-  const sections = input.meetings.map((m) => renderMeeting(m, input.now)).join('\n\n');
-  return [header, '', sections].join('\n');
+
+  const sections = input.meetings.map((m) => renderMeeting(m, input.now)).join('\n\n---\n\n');
+  return `${header}\n${sections}\n`;
 }
 
 interface DashboardConfig {
-  pageId: string;
+  filePath: string;
   meetingService: MeetingService;
   nudgeService: NudgeService;
-  confluenceService: ConfluenceService;
 }
 
 let config: DashboardConfig | null = null;
@@ -164,7 +149,7 @@ export function configureDashboard(c: DashboardConfig): void {
 }
 
 export async function publishDashboard(): Promise<void> {
-  if (!config || !config.pageId) return;
+  if (!config || !config.filePath) return;
 
   try {
     const meetings = await config.meetingService.listActive();
@@ -196,8 +181,8 @@ export async function publishDashboard(): Promise<void> {
     }
 
     const body = renderDashboardBody({ meetings: dashboardMeetings, now: new Date() });
-    await config.confluenceService.updatePage(config.pageId, 'Meetassist dashboard', body);
+    await fs.writeFile(config.filePath, body, 'utf8');
   } catch (err: any) {
-    console.error('[dashboard] publish failed:', err?.response?.data ?? err?.message ?? err);
+    console.error('[dashboard] publish failed:', err?.message ?? err);
   }
 }

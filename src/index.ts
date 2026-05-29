@@ -26,16 +26,12 @@ async function main() {
   });
   const relayService = new RelayService(meetingService, nudgeService);
 
-  const dashboardPageId = process.env.MEETASSIST_DASHBOARD_PAGE_ID ?? '';
-  if (!dashboardPageId) {
-    console.warn('[boot] MEETASSIST_DASHBOARD_PAGE_ID not set — dashboard publishing disabled.');
-  }
   configureDashboard({
-    pageId: dashboardPageId,
+    filePath: './dashboard.md',
     meetingService,
     nudgeService,
-    confluenceService,
   });
+  console.log('[boot] Dashboard will be written to ./dashboard.md');
 
   configureVerification({
     meetingService,
