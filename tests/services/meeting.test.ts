@@ -78,4 +78,33 @@ describe('MeetingService', () => {
     const result = await service.getUserById('missing');
     expect(result).toBeNull();
   });
+
+  it('updateAction without purpose updates only the action column', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.updateAction('m1', 'comment');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('UPDATE meetings SET document_action');
+    expect(call[0]).not.toContain('purpose');
+    expect(call[1]).toEqual(['comment', 'm1']);
+  });
+
+  it('updateAction with purpose updates both columns in one statement', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.updateAction('m1', 'comment', 'Please review the migration plan');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('document_action = $1');
+    expect(call[0]).toContain('purpose = $2');
+    expect(call[1]).toEqual(['comment', 'Please review the migration plan', 'm1']);
+  });
+
+  it('updateAction with empty-string purpose still updates the column', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.updateAction('m1', 'comment', '');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('purpose = $2');
+    expect(call[1]).toEqual(['comment', '', 'm1']);
+  });
 });

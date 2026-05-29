@@ -66,8 +66,15 @@ export class MeetingService {
     await this.pool.query(`UPDATE meetings SET status = $1 WHERE id = $2`, [status, id]);
   }
 
-  async updateAction(id: string, action: string): Promise<void> {
-    await this.pool.query(`UPDATE meetings SET document_action = $1 WHERE id = $2`, [action, id]);
+  async updateAction(id: string, action: string, purpose?: string): Promise<void> {
+    if (purpose === undefined) {
+      await this.pool.query(`UPDATE meetings SET document_action = $1 WHERE id = $2`, [action, id]);
+    } else {
+      await this.pool.query(
+        `UPDATE meetings SET document_action = $1, purpose = $2 WHERE id = $3`,
+        [action, purpose, id]
+      );
+    }
   }
 
   async addParticipant(meetingId: string, userId: string, role: ParticipantRole): Promise<void> {
