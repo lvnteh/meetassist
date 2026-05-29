@@ -124,7 +124,7 @@ describe('renderDashboardBody — populated', () => {
     expect(body).toContain('Action requested: approve');
     expect(body).toContain('Progress: 1/3 done · 1 blocked');
 
-    expect(body).toContain('<a href="https://example.atlassian.net/wiki/spaces/X/pages/12345/Page">Take Template Ownership</a>');
+    expect(body).toContain('<ac:link><ri:url ri:value="https://example.atlassian.net/wiki/spaces/X/pages/12345/Page" /><ac:link-body>Take Template Ownership</ac:link-body></ac:link>');
 
     expect(body).toContain('<th>Participant</th>');
     expect(body).toContain('<th>Status</th>');

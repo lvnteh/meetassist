@@ -122,7 +122,7 @@ function renderMeeting(m: DashboardMeeting, now: Date): string {
   return [
     `<h2>${escapeXml(m.title)}</h2>`,
     `<p>${escapeXml(formatStartTime(m.start_time))} · ${escapeXml(idPrefix)}</p>`,
-    `<p>Document: <a href="${escapeXml(m.document_url)}">${escapeXml(m.document_title)}</a></p>`,
+    `<p>Document: <ac:link><ri:url ri:value="${escapeXml(m.document_url)}" /><ac:link-body>${escapeXml(m.document_title)}</ac:link-body></ac:link></p>`,
     `<p>Action requested: ${escapeXml(humaniseAction(m.document_action))}</p>`,
     `<p>${escapeXml(progress)}</p>`,
     '<table>',
