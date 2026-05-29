@@ -252,3 +252,97 @@ describe('runVerification — comment check', () => {
     expect(deps.slackClient.chat.postMessage).not.toHaveBeenCalled();
   });
 });
+
+import { handleVerificationNudgeYes, handleVerificationNudgeSkip } from '../../src/services/verification';
+
+describe('verification button handlers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const baseMeeting = {
+    id: 'm1',
+    title: 'Take Template Ownership',
+    document_url: 'https://x.example/doc',
+    document_action: 'comment',
+  };
+  const baseParticipant = {
+    user_id: 'u1',
+    display_name: 'Alice',
+    slack_user_id: 'U_ALICE',
+    email: 'a@b.com',
+    status: 'completed',
+  };
+
+  it('handleVerificationNudgeYes sends DM to participant, records nudge, increments reminder, replaces original', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined);
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+      },
+    });
+    configureVerification(deps as any);
+
+    await handleVerificationNudgeYes('m1|u1', respond);
+
+    expect(deps.relayService.sendToParticipant).toHaveBeenCalledTimes(1);
+    const sendArgs = deps.relayService.sendToParticipant.mock.calls[0][0];
+    expect(sendArgs.slackUserId).toBe('U_ALICE');
+    expect(sendArgs.text).toContain('Take Template Ownership');
+    expect(sendArgs.text).toContain('https://x.example/doc');
+
+    expect(deps.nudgeService.recordNudge).toHaveBeenCalledTimes(1);
+    const recordArgs = deps.nudgeService.recordNudge.mock.calls[0][0];
+    expect(recordArgs.user_id).toBe('u1');
+    expect(recordArgs.meeting_id).toBe('m1');
+    expect(recordArgs.type).toBe('reminder');
+
+    expect(deps.meetingService.incrementReminderCount).toHaveBeenCalledWith('m1', 'u1');
+
+    expect(respond).toHaveBeenCalledTimes(1);
+    const respondArgs = respond.mock.calls[0][0];
+    expect(respondArgs.replace_original).toBe(true);
+    expect(respondArgs.text).toContain('Nudge sent');
+    expect(respondArgs.text).toContain('Alice');
+  });
+
+  it('handleVerificationNudgeYes returns silently if meeting deleted', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined);
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(null),
+        getParticipantsWithUsers: vi.fn(),
+      },
+    });
+    configureVerification(deps as any);
+    await handleVerificationNudgeYes('m1|u1', respond);
+    expect(deps.relayService.sendToParticipant).not.toHaveBeenCalled();
+    expect(deps.nudgeService.recordNudge).not.toHaveBeenCalled();
+    expect(respond).not.toHaveBeenCalled();
+  });
+
+  it('handleVerificationNudgeYes returns silently if participant removed', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined);
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([]),
+      },
+    });
+    configureVerification(deps as any);
+    await handleVerificationNudgeYes('m1|u1', respond);
+    expect(deps.relayService.sendToParticipant).not.toHaveBeenCalled();
+    expect(respond).not.toHaveBeenCalled();
+  });
+
+  it('handleVerificationNudgeSkip replaces original DM with Skipped', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined);
+    configureVerification(makeDeps() as any);
+    await handleVerificationNudgeSkip('m1|u1', respond);
+    expect(respond).toHaveBeenCalledTimes(1);
+    const args = respond.mock.calls[0][0];
+    expect(args.replace_original).toBe(true);
+    expect(args.text).toContain('Skipped');
+  });
+});

@@ -2,6 +2,7 @@ import { app } from './app';
 import type { MeetingService } from '../services/meeting';
 import type { RelayService } from './relay';
 import { publishDashboard } from '../services/dashboard';
+import { handleVerificationNudgeYes, handleVerificationNudgeSkip } from '../services/verification';
 
 export function registerActions(
   meetingService: MeetingService,
@@ -92,5 +93,17 @@ export function registerActions(
 
   app.action(/^send_nudge_skip_(.+)$/, async ({ ack }) => {
     await ack();
+  });
+
+  app.action('verification_nudge_yes', async ({ ack, action, respond }) => {
+    await ack();
+    const value = (action as any).value as string;
+    await handleVerificationNudgeYes(value, respond as any);
+  });
+
+  app.action('verification_nudge_skip', async ({ ack, action, respond }) => {
+    await ack();
+    const value = (action as any).value as string;
+    await handleVerificationNudgeSkip(value, respond as any);
   });
 }

@@ -109,3 +109,56 @@ function humaniseActionForDm(action: string): string {
 function escapeForSlack(s: string): string {
   return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+type RespondFn = (args: { replace_original?: boolean; text?: string; blocks?: any[] }) => Promise<unknown>;
+
+export async function handleVerificationNudgeYes(value: string, respond: RespondFn): Promise<void> {
+  if (!deps) return;
+  const [meetingId, userId] = value.split('|');
+  if (!meetingId || !userId) return;
+
+  try {
+    const meeting = await deps.meetingService.getById(meetingId);
+    if (!meeting) return;
+
+    const participants = await deps.meetingService.getParticipantsWithUsers(meetingId);
+    const participant = (participants as any[]).find((p) => p.user_id === userId);
+    if (!participant) return;
+
+    const actionLabel = humaniseActionForDm(meeting.document_action);
+    const text =
+      `Meetassist: Just checking — your action for *${meeting.title}* was to ${actionLabel}, ` +
+      `but I don't see it on the doc yet. Could you take a moment to follow up?\n${meeting.document_url}`;
+
+    const { channel, ts } = await deps.relayService.sendToParticipant({
+      slackUserId: participant.slack_user_id,
+      text,
+    });
+    await deps.nudgeService.recordNudge({
+      user_id: userId,
+      meeting_id: meetingId,
+      slack_channel_id: channel,
+      message_ts: ts,
+      type: 'reminder',
+    });
+    await deps.meetingService.incrementReminderCount(meetingId, userId);
+
+    await respond({
+      replace_original: true,
+      text: `✓ Nudge sent to ${participant.display_name}.`,
+      blocks: [
+        { type: 'section', text: { type: 'mrkdwn', text: `✓ Nudge sent to *${escapeForSlack(participant.display_name)}*.` } },
+      ],
+    });
+  } catch (err: any) {
+    console.error('[verification] nudge_yes failed:', err?.response?.data ?? err?.message ?? err);
+  }
+}
+
+export async function handleVerificationNudgeSkip(_value: string, respond: RespondFn): Promise<void> {
+  await respond({
+    replace_original: true,
+    text: 'Skipped.',
+    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Skipped.' } }],
+  });
+}
