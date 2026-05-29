@@ -27,11 +27,11 @@ async function main() {
   const relayService = new RelayService(meetingService, nudgeService);
 
   configureDashboard({
-    filePath: './dashboard.md',
+    filePath: './dashboard.html',
     meetingService,
     nudgeService,
   });
-  console.log('[boot] Dashboard will be written to ./dashboard.md');
+  console.log('[boot] Dashboard will be written to ./dashboard.html');
 
   configureVerification({
     meetingService,

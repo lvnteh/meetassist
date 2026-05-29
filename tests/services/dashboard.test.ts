@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { relativeTime, humaniseStatus, humaniseAction, renderDashboardBody, configureDashboard, publishDashboard } from '../../src/services/dashboard';
+import { relativeTime, humaniseStatus, humaniseAction, escapeHtml, renderDashboardBody, configureDashboard, publishDashboard } from '../../src/services/dashboard';
 
 describe('relativeTime', () => {
   const now = new Date('2026-05-29T10:00:00Z');
@@ -60,15 +60,31 @@ describe('humaniseAction', () => {
   });
 });
 
+describe('escapeHtml', () => {
+  it('escapes the five XML/HTML special characters', () => {
+    expect(escapeHtml('a & b')).toBe('a &amp; b');
+    expect(escapeHtml('<script>')).toBe('&lt;script&gt;');
+    expect(escapeHtml('"quoted"')).toBe('&quot;quoted&quot;');
+    expect(escapeHtml("it's")).toBe('it&#39;s');
+  });
+
+  it('returns empty string for null/undefined', () => {
+    expect(escapeHtml(null)).toBe('');
+    expect(escapeHtml(undefined)).toBe('');
+  });
+});
+
 describe('renderDashboardBody — empty state', () => {
   const now = new Date('2026-05-29T10:30:00Z');
 
-  it('renders a header and a no-meetings message', () => {
+  it('renders a valid HTML doc with header and no-meetings message', () => {
     const body = renderDashboardBody({ meetings: [], now });
 
-    expect(body).toContain('# Meetassist dashboard');
+    expect(body).toMatch(/^<!DOCTYPE html>/);
+    expect(body).toContain('<title>Meetassist dashboard</title>');
+    expect(body).toContain('<h1>Meetassist dashboard</h1>');
     expect(body).toContain('Last updated:');
-    expect(body).toContain('No active meetings');
+    expect(body).toContain('No active meetings.');
   });
 });
 
@@ -111,27 +127,29 @@ describe('renderDashboardBody — populated', () => {
   it('renders meeting heading, metadata, progress, and a participant table', () => {
     const body = renderDashboardBody({ meetings: [meeting], now });
 
-    expect(body).toContain('## Take Template Ownership');
-    expect(body).toContain('**Action requested:** approve');
-    expect(body).toContain('**Progress:** 1/3 done · 1 blocked');
+    expect(body).toContain('<h2>Take Template Ownership</h2>');
+    expect(body).toContain('approve');
+    expect(body).toContain('1/3 done · 1 blocked');
 
-    expect(body).toContain('[Take Template Ownership](https://example.atlassian.net/wiki/spaces/X/pages/12345/Page)');
+    expect(body).toContain('href="https://example.atlassian.net/wiki/spaces/X/pages/12345/Page"');
+    expect(body).toContain('>Take Template Ownership</a>');
 
-    expect(body).toContain('| Participant | Status | Last updated | Reply |');
+    expect(body).toContain('<th>Participant</th>');
+    expect(body).toContain('<th>Status</th>');
     expect(body).toContain('@alice');
-    expect(body).toContain('done');
+    expect(body).toContain('status-done');
     expect(body).toContain('2h ago');
     expect(body).toContain('approved, looks good');
 
     expect(body).toContain('@bob');
-    expect(body).toContain('nudge sent');
+    expect(body).toContain('status-sent');
 
     expect(body).toContain('@carol');
-    expect(body).toContain('blocked');
+    expect(body).toContain('status-blocked');
     expect(body).toContain('waiting on legal');
   });
 
-  it('omits the blocked count from the progress line when there are no blocked participants', () => {
+  it('omits the blocked count from the progress text when there are no blocked participants', () => {
     const noBlocked = {
       ...meeting,
       participants: meeting.participants.filter((p: any) => p.status !== 'blocked'),
@@ -139,44 +157,56 @@ describe('renderDashboardBody — populated', () => {
 
     const body = renderDashboardBody({ meetings: [noBlocked], now });
 
-    expect(body).toContain('**Progress:** 1/2 done');
-    expect(body).not.toContain('blocked');
+    expect(body).toContain('1/2 done');
+    expect(body).not.toContain('1 blocked');
   });
 
-  it('escapes pipe characters in user-supplied text so the table stays valid', () => {
+  it('escapes HTML in user-supplied text to prevent XSS', () => {
     const m = {
       ...meeting,
+      title: '<script>alert(1)</script>',
       participants: [
-        { ...meeting.participants[0], display_name: 'a|b', latest_reply: 'x | y' },
+        { ...meeting.participants[0], display_name: 'a&b', latest_reply: '"bad" <tag>' },
       ],
     };
 
     const body = renderDashboardBody({ meetings: [m], now });
 
-    expect(body).toContain('@a\\|b');
-    expect(body).toContain('x \\| y');
+    expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(body).not.toContain('<script>alert(1)</script>');
+    expect(body).toContain('@a&amp;b');
+    expect(body).toContain('&quot;bad&quot; &lt;tag&gt;');
   });
 
-  it('renders the meeting purpose as a metadata line', () => {
+  it('renders the meeting purpose row when present', () => {
     const body = renderDashboardBody({ meetings: [meeting], now });
 
-    expect(body).toContain('**Purpose:** Decide on the new template format');
+    expect(body).toContain('Purpose');
+    expect(body).toContain('Decide on the new template format');
   });
 
-  it('omits the purpose line when purpose is empty', () => {
+  it('omits the purpose row when purpose is empty', () => {
     const m = { ...meeting, purpose: '' };
     const body = renderDashboardBody({ meetings: [m], now });
 
-    expect(body).not.toContain('**Purpose:**');
+    expect(body).not.toContain('>Purpose<');
   });
 
-  it('separates multiple meetings with horizontal rules', () => {
+  it('renders multiple meetings as separate sections', () => {
     const second = { ...meeting, id: 'mtg-2', title: 'Second Meeting' };
     const body = renderDashboardBody({ meetings: [meeting, second], now });
 
-    expect(body).toContain('## Take Template Ownership');
-    expect(body).toContain('## Second Meeting');
-    expect(body).toContain('\n---\n');
+    expect(body).toContain('<h2>Take Template Ownership</h2>');
+    expect(body).toContain('<h2>Second Meeting</h2>');
+    const sectionCount = (body.match(/<section class="meeting">/g) ?? []).length;
+    expect(sectionCount).toBe(2);
+  });
+
+  it('embeds CSS in a <style> block', () => {
+    const body = renderDashboardBody({ meetings: [meeting], now });
+    expect(body).toContain('<style>');
+    expect(body).toContain('</style>');
+    expect(body).toContain('.status-done');
   });
 });
 
@@ -186,7 +216,7 @@ describe('publishDashboard', () => {
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dashboard-test-'));
-    tmpFile = path.join(tmpDir, 'dashboard.md');
+    tmpFile = path.join(tmpDir, 'dashboard.html');
   });
 
   afterEach(async () => {
@@ -203,7 +233,7 @@ describe('publishDashboard', () => {
     expect(meetingService.listActive).not.toHaveBeenCalled();
   });
 
-  it('fetches meetings + participants + replies and writes the markdown file', async () => {
+  it('fetches meetings + participants + replies and writes the HTML file', async () => {
     const meeting = {
       id: 'mtg-1',
       title: 'M',
@@ -237,10 +267,11 @@ describe('publishDashboard', () => {
     expect(nudgeService.getLatestReply).toHaveBeenCalledWith('mtg-1', 'user-1');
 
     const written = await fs.readFile(tmpFile, 'utf8');
-    expect(written).toContain('# Meetassist dashboard');
+    expect(written).toMatch(/^<!DOCTYPE html>/);
+    expect(written).toContain('<h1>Meetassist dashboard</h1>');
     expect(written).toContain('@alice');
     expect(written).toContain('hello');
-    expect(written).toContain('**Purpose:** do the thing');
+    expect(written).toContain('do the thing');
   });
 
   it('catches and logs errors from the underlying calls without throwing', async () => {
