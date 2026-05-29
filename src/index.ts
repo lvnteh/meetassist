@@ -12,6 +12,7 @@ import { registerCommands } from './bot/commands';
 import { registerActions } from './bot/actions';
 import { startScheduler } from './scheduler/cron';
 import { configureDashboard } from './services/dashboard';
+import { configureVerification } from './services/verification';
 
 async function main() {
   await createTables(pool);
@@ -34,6 +35,14 @@ async function main() {
     meetingService,
     nudgeService,
     confluenceService,
+  });
+
+  configureVerification({
+    meetingService,
+    nudgeService,
+    confluenceService,
+    relayService,
+    slackClient: app.client,
   });
 
   registerCommands(meetingService, nudgeService, relayService, confluenceService);
