@@ -46,7 +46,7 @@ export function registerCommands(
         createSessions.set(command.user_id, { step: 'title' });
         await app.client.chat.postMessage({
           channel: command.user_id,
-          text: 'Meetassist: Let\'s create a meeting. Reply here in this DM.\n\nWhat is the *meeting title*?',
+          text: 'Tip: you can also use the *➕ Create meeting* button in this DM for a faster form-based flow. Continuing with text wizard…\n\nMeetassist: Let\'s create a meeting. Reply here in this DM.\n\nWhat is the *meeting title*?',
         });
         await respond({ response_type: 'ephemeral', text: 'Meetassist: Started in your DM with me.' });
         break;
