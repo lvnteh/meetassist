@@ -43,7 +43,73 @@ export function buildOperatorView(input: OperatorViewInput): SlackHomeView {
     return { type: 'home', blocks };
   }
 
-  // (multi-meeting branch — added in Task 5)
+  const totalPending = input.meetings.reduce(
+    (sum, m) => sum + m.participants.filter((p) => p.status !== 'completed').length,
+    0
+  );
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `${input.meetings.length} active meeting${input.meetings.length === 1 ? '' : 's'} · ${totalPending} pending replies`,
+    },
+  });
+  blocks.push({ type: 'divider' });
+
+  for (const { meeting, participants } of input.meetings) {
+    const done = participants.filter((p) => p.status === 'completed').length;
+    const total = participants.length;
+    const blocked = participants.filter((p) => p.status === 'blocked').length;
+
+    const date = new Date(meeting.start_time);
+    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const idPrefix = meeting.id.slice(0, 8);
+    const actionLabel = humaniseDocumentAction(meeting.document_action);
+
+    const progressLine = blocked > 0
+      ? `Progress: ${done}/${total} done · ${blocked} blocked`
+      : `Progress: ${done}/${total} done`;
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          `*${meeting.title}*`,
+          `${dateStr} · ${timeStr} · \`${idPrefix}\``,
+          `Action: ${actionLabel}`,
+          progressLine,
+          `Doc: <${meeting.document_url}|${meeting.document_title}>`,
+        ].join('\n'),
+      },
+    });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Send' },       action_id: 'home_send',        value: meeting.id, style: 'primary' },
+        { type: 'button', text: { type: 'plain_text', text: 'Remind' },     action_id: 'home_remind',      value: meeting.id },
+        { type: 'button', text: { type: 'plain_text', text: 'Status' },     action_id: 'home_status',      value: meeting.id },
+        { type: 'button', text: { type: 'plain_text', text: 'Check doc' },  action_id: 'home_check_doc',   value: meeting.id },
+        { type: 'button', text: { type: 'plain_text', text: 'Set action' }, action_id: 'home_set_action',  value: meeting.id },
+        { type: 'button', text: { type: 'plain_text', text: 'Followup' },   action_id: 'home_followup',    value: meeting.id },
+      ],
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  blocks.push({
+    type: 'actions',
+    elements: [
+      {
+        type: 'button',
+        text: { type: 'plain_text', text: '+ Create meeting' },
+        action_id: 'home_create_meeting',
+        style: 'primary',
+      },
+    ],
+  });
+
   return { type: 'home', blocks };
 }
 
