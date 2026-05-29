@@ -10,6 +10,7 @@ import { ConfluenceService } from './services/confluence';
 import { RelayService } from './bot/relay';
 import { registerCommands } from './bot/commands';
 import { registerActions } from './bot/actions';
+import { registerHome } from './bot/home';
 import { startScheduler } from './scheduler/cron';
 
 async function main() {
@@ -26,6 +27,7 @@ async function main() {
 
   registerCommands(meetingService, nudgeService, relayService, confluenceService);
   registerActions(meetingService, relayService);
+  registerHome(meetingService, nudgeService, relayService, confluenceService);
   relayService.registerDmListener(meetingService);
 
   startScheduler(meetingService, relayService);
