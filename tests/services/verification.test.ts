@@ -95,3 +95,160 @@ describe('runVerification — irrelevant cases', () => {
     expect(deps.slackClient.chat.postMessage).not.toHaveBeenCalled();
   });
 });
+
+describe('runVerification — comment check', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const baseMeeting = {
+    id: 'm1',
+    confluence_page_id: '123',
+    document_action: 'comment',
+    organizer_user_id: 'org-uuid',
+    title: 'Take Template Ownership',
+    document_url: 'https://x.example/doc',
+    document_title: 'Doc',
+  };
+
+  const baseParticipant = {
+    user_id: 'u1',
+    status: 'completed',
+    email: 'alice@example.com',
+    display_name: 'Alice',
+    slack_user_id: 'U_ALICE',
+  };
+
+  function depsWithMatchingComment(commentEmail: string) {
+    return makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+        getUserById: vi.fn().mockResolvedValue({ id: 'org-uuid', slack_user_id: 'U_ORG', display_name: 'Op' }),
+      },
+      confluenceService: {
+        getComments: vi.fn().mockResolvedValue([{ authorEmail: commentEmail }]),
+      },
+    });
+  }
+
+  it('stays silent when participant has commented on the doc', async () => {
+    const deps = depsWithMatchingComment('alice@example.com');
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('comment match is case-insensitive and trimmed', async () => {
+    const deps = depsWithMatchingComment('  Alice@Example.COM  ');
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('DMs the organizer when no matching comment exists', async () => {
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+        getUserById: vi.fn().mockResolvedValue({ id: 'org-uuid', slack_user_id: 'U_ORG', display_name: 'Op' }),
+      },
+      confluenceService: {
+        getComments: vi.fn().mockResolvedValue([{ authorEmail: 'someone-else@example.com' }]),
+      },
+    });
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+
+    expect(deps.slackClient.chat.postMessage).toHaveBeenCalledTimes(1);
+    const call = deps.slackClient.chat.postMessage.mock.calls[0][0];
+    expect(call.channel).toBe('U_ORG');
+    expect(call.text).toContain('Alice');
+    expect(call.text).toContain('Take Template Ownership');
+    const blocks = JSON.stringify(call.blocks);
+    expect(blocks).toContain('verification_nudge_yes');
+    expect(blocks).toContain('verification_nudge_skip');
+    expect(blocks).toContain('m1|u1');
+  });
+
+  it('DMs the organizer for provide_input action', async () => {
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue({ ...baseMeeting, document_action: 'provide_input' }),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+        getUserById: vi.fn().mockResolvedValue({ id: 'org-uuid', slack_user_id: 'U_ORG', display_name: 'Op' }),
+      },
+      confluenceService: { getComments: vi.fn().mockResolvedValue([]) },
+    });
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('DMs the organizer for approve action', async () => {
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue({ ...baseMeeting, document_action: 'approve' }),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+        getUserById: vi.fn().mockResolvedValue({ id: 'org-uuid', slack_user_id: 'U_ORG', display_name: 'Op' }),
+      },
+      confluenceService: { getComments: vi.fn().mockResolvedValue([]) },
+    });
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats empty participant email as unverified and DMs the organizer', async () => {
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([{ ...baseParticipant, email: '' }]),
+        getUserById: vi.fn().mockResolvedValue({ id: 'org-uuid', slack_user_id: 'U_ORG', display_name: 'Op' }),
+      },
+      confluenceService: {
+        getComments: vi.fn().mockResolvedValue([{ authorEmail: 'someone@example.com' }]),
+      },
+    });
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('catches Confluence errors, logs, and does not DM', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+        getUserById: vi.fn().mockResolvedValue({ id: 'org-uuid', slack_user_id: 'U_ORG', display_name: 'Op' }),
+      },
+      confluenceService: {
+        getComments: vi.fn().mockRejectedValue(new Error('confluence boom')),
+      },
+    });
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalled();
+    const logged = (errSpy.mock.calls[0] ?? []).join(' ');
+    expect(logged).toContain('[verification]');
+    errSpy.mockRestore();
+  });
+
+  it('does not DM if organizer user cannot be resolved', async () => {
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(baseMeeting),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+        getUserById: vi.fn().mockResolvedValue(null),
+      },
+      confluenceService: {
+        getComments: vi.fn().mockResolvedValue([{ authorEmail: 'someone@example.com' }]),
+      },
+    });
+    configureVerification(deps as any);
+    await runVerification('m1', 'u1');
+    expect(deps.slackClient.chat.postMessage).not.toHaveBeenCalled();
+  });
+});
