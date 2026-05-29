@@ -1,4 +1,7 @@
 import type { ParticipantStatus, DocumentAction } from '../types';
+import type { MeetingService } from './meeting';
+import type { NudgeService } from './nudge';
+import type { ConfluenceService } from './confluence';
 
 export function relativeTime(from: Date, now: Date = new Date()): string {
   const diffMs = now.getTime() - from.getTime();
@@ -143,4 +146,55 @@ export function renderDashboardBody(input: DashboardInput): string {
   }
   const sections = input.meetings.map((m) => renderMeeting(m, input.now)).join('\n\n');
   return [header, '', sections].join('\n');
+}
+
+interface DashboardConfig {
+  pageId: string;
+  meetingService: MeetingService;
+  nudgeService: NudgeService;
+  confluenceService: ConfluenceService;
+}
+
+let config: DashboardConfig | null = null;
+
+export function configureDashboard(c: DashboardConfig): void {
+  config = c;
+}
+
+export async function publishDashboard(): Promise<void> {
+  if (!config || !config.pageId) return;
+
+  try {
+    const meetings = await config.meetingService.listActive();
+    const dashboardMeetings: DashboardMeeting[] = [];
+
+    for (const m of meetings) {
+      const participantsRaw = await config.meetingService.getParticipantsWithUsers(m.id);
+      const participants: DashboardParticipant[] = [];
+      for (const p of participantsRaw as any[]) {
+        const reply = await config.nudgeService.getLatestReply(m.id, p.user_id);
+        participants.push({
+          slack_user_id: p.slack_user_id,
+          display_name: p.display_name,
+          status: p.status,
+          updated_at: p.updated_at ?? null,
+          latest_reply: reply,
+        });
+      }
+      dashboardMeetings.push({
+        id: m.id,
+        title: m.title,
+        start_time: m.start_time,
+        document_url: m.document_url,
+        document_title: m.document_title,
+        document_action: m.document_action as DocumentAction,
+        participants,
+      });
+    }
+
+    const body = renderDashboardBody({ meetings: dashboardMeetings, now: new Date() });
+    await config.confluenceService.updatePage(config.pageId, 'Meetassist dashboard', body);
+  } catch (err: any) {
+    console.error('[dashboard] publish failed:', err?.response?.data ?? err?.message ?? err);
+  }
 }

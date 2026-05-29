@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { relativeTime, escapeXml, humaniseStatus, humaniseAction, renderDashboardBody } from '../../src/services/dashboard';
+import { describe, it, expect, vi } from 'vitest';
+import { relativeTime, escapeXml, humaniseStatus, humaniseAction, renderDashboardBody, configureDashboard, publishDashboard } from '../../src/services/dashboard';
 
 describe('relativeTime', () => {
   const now = new Date('2026-05-29T10:00:00Z');
@@ -171,5 +171,90 @@ describe('renderDashboardBody — populated', () => {
     expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(body).toContain('@x&lt;y');
     expect(body).toContain('a &amp; b');
+  });
+});
+
+describe('publishDashboard', () => {
+  it('is a no-op when page id is empty', async () => {
+    const meetingService = { listActive: vi.fn() } as any;
+    const nudgeService = { getLatestReply: vi.fn() } as any;
+    const confluenceService = { updatePage: vi.fn() } as any;
+
+    configureDashboard({ pageId: '', meetingService, nudgeService, confluenceService });
+    await publishDashboard();
+
+    expect(meetingService.listActive).not.toHaveBeenCalled();
+    expect(confluenceService.updatePage).not.toHaveBeenCalled();
+  });
+
+  it('fetches meetings + participants + replies, renders, and updates the page', async () => {
+    const meeting = {
+      id: 'mtg-1',
+      title: 'M',
+      start_time: '2026-06-04T09:00:00Z',
+      document_url: 'https://example/p',
+      document_title: 'Doc',
+      document_action: 'read',
+    };
+    const participant = {
+      slack_user_id: 'U1',
+      display_name: 'alice',
+      user_id: 'user-1',
+      status: 'replied',
+    };
+
+    const meetingService = {
+      listActive: vi.fn().mockResolvedValue([meeting]),
+      getParticipantsWithUsers: vi.fn().mockResolvedValue([participant]),
+    } as any;
+    const nudgeService = {
+      getLatestReply: vi.fn().mockResolvedValue('hello'),
+    } as any;
+    const confluenceService = {
+      updatePage: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    configureDashboard({
+      pageId: '12345',
+      meetingService,
+      nudgeService,
+      confluenceService,
+    });
+
+    await publishDashboard();
+
+    expect(meetingService.listActive).toHaveBeenCalledWith();
+    expect(meetingService.getParticipantsWithUsers).toHaveBeenCalledWith('mtg-1');
+    expect(nudgeService.getLatestReply).toHaveBeenCalledWith('mtg-1', 'user-1');
+
+    expect(confluenceService.updatePage).toHaveBeenCalledTimes(1);
+    const [pageId, title, body] = confluenceService.updatePage.mock.calls[0];
+    expect(pageId).toBe('12345');
+    expect(title).toBe('Meetassist dashboard');
+    expect(body).toContain('@alice');
+    expect(body).toContain('hello');
+  });
+
+  it('catches and logs errors from updatePage without throwing', async () => {
+    const meetingService = {
+      listActive: vi.fn().mockResolvedValue([]),
+      getParticipantsWithUsers: vi.fn(),
+    } as any;
+    const nudgeService = { getLatestReply: vi.fn() } as any;
+    const confluenceService = {
+      updatePage: vi.fn().mockRejectedValue(new Error('boom')),
+    } as any;
+
+    configureDashboard({
+      pageId: '12345',
+      meetingService,
+      nudgeService,
+      confluenceService,
+    });
+
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(publishDashboard()).resolves.toBeUndefined();
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
   });
 });
