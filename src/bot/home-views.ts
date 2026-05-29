@@ -113,7 +113,58 @@ export function buildOperatorView(input: OperatorViewInput): SlackHomeView {
   return { type: 'home', blocks };
 }
 
-export function buildParticipantView(_input: ParticipantViewInput): SlackHomeView {
-  // Implemented in Task 6
-  return { type: 'home', blocks: [] };
+export function buildParticipantView(input: ParticipantViewInput): SlackHomeView {
+  const blocks: any[] = [
+    { type: 'header', text: { type: 'plain_text', text: 'Meetassist' } },
+  ];
+
+  if (input.meetings.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: "You're all caught up. No actions needed right now." },
+    });
+    return { type: 'home', blocks };
+  }
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `${input.meetings.length} action${input.meetings.length === 1 ? '' : 's'} waiting for you`,
+    },
+  });
+  blocks.push({ type: 'divider' });
+
+  for (const meeting of input.meetings) {
+    const date = new Date(meeting.start_time);
+    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const actionLabel = humaniseDocumentAction(meeting.document_action);
+    const statusLabel = humaniseParticipantStatus(meeting.participant_status);
+
+    blocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: [
+          `*${meeting.title}*`,
+          `${dateStr} · ${timeStr}`,
+          `Action requested: ${actionLabel}`,
+          `Document: <${meeting.document_url}|${meeting.document_title}>`,
+          `Status: ${statusLabel}`,
+        ].join('\n'),
+      },
+    });
+    blocks.push({
+      type: 'actions',
+      elements: [
+        { type: 'button', text: { type: 'plain_text', text: 'Mark done' },          action_id: 'mark_done',            value: meeting.id, style: 'primary' },
+        { type: 'button', text: { type: 'plain_text', text: 'Need clarification' }, action_id: 'need_clarification',   value: meeting.id },
+        { type: 'button', text: { type: 'plain_text', text: 'Cannot complete' },    action_id: 'cannot_complete',      value: meeting.id, style: 'danger' },
+      ],
+    });
+    blocks.push({ type: 'divider' });
+  }
+
+  return { type: 'home', blocks };
 }

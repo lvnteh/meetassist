@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildOperatorView } from '../../src/bot/home-views';
+import { buildOperatorView, buildParticipantView } from '../../src/bot/home-views';
 
 describe('buildOperatorView', () => {
   it('returns empty state when no meetings', () => {
@@ -79,5 +79,49 @@ describe('buildOperatorView', () => {
 
     const footer = actionsBlocks[actionsBlocks.length - 1];
     expect(footer.elements[0].action_id).toBe('home_create_meeting');
+  });
+});
+
+describe('buildParticipantView', () => {
+  it('returns empty state when no open items', () => {
+    const view = buildParticipantView({ meetings: [] });
+
+    const headerBlock = view.blocks.find((b: any) => b.type === 'header');
+    expect((headerBlock as any).text.text).toBe('Meetassist');
+
+    const sectionTexts = view.blocks
+      .filter((b: any) => b.type === 'section')
+      .map((b: any) => b.text?.text ?? '');
+    expect(sectionTexts.some((t) => t.includes("You're all caught up"))).toBe(true);
+  });
+
+  it('renders one card per open item with three reply buttons', () => {
+    const view = buildParticipantView({
+      meetings: [
+        {
+          id: 'mtg-1', title: 'Roadmap Review', start_time: '2026-06-01T09:00:00Z',
+          organizer_user_id: 'op1', purpose: 'p', document_url: 'https://x/wiki/spaces/A/pages/1/r',
+          document_title: 'Doc', document_action: 'read', confluence_page_id: '1',
+          status: 'active', created_at: '', participant_status: 'nudge_sent',
+        },
+      ],
+    });
+
+    const sectionTexts = view.blocks
+      .filter((b: any) => b.type === 'section')
+      .map((b: any) => b.text?.text ?? '');
+
+    const subtitle = sectionTexts.find((t) => t.includes('action'));
+    expect(subtitle).toContain('1 action');
+
+    const card = sectionTexts.find((t) => t.includes('Roadmap Review'));
+    expect(card).toContain('Read the document');
+    expect(card).toContain('nudge sent');
+    expect(card).toContain('<https://x/wiki/spaces/A/pages/1/r|Doc>');
+
+    const actionsBlock = view.blocks.find((b: any) => b.type === 'actions') as any;
+    const ids = actionsBlock.elements.map((e: any) => e.action_id);
+    expect(ids).toEqual(['mark_done', 'need_clarification', 'cannot_complete']);
+    expect(actionsBlock.elements[0].value).toBe('mtg-1');
   });
 });
