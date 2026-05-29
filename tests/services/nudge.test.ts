@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { NudgeService } from '../../src/services/nudge';
+import type { Meeting } from '../../src/types';
 
 function makePool(rows: any[] = []) {
   return { query: vi.fn().mockResolvedValue({ rows }) } as any;
@@ -40,6 +41,63 @@ describe('NudgeService message builders', () => {
     const text = nudgeService.buildFollowUpMessage(mockMeeting);
     expect(text).toContain('Roadmap Review');
     expect(text).toContain('comment');
+  });
+});
+
+const baseMeeting: Meeting = {
+  id: 'm1',
+  title: 'Q3 Planning',
+  start_time: '2026-06-04T09:00:00Z',
+  organizer_user_id: 'org',
+  purpose: 'Review the proposed roadmap and flag anything blocking your team',
+  document_url: 'https://example.atlassian.net/wiki/spaces/X/pages/12345/Page',
+  document_title: 'Q3 Roadmap',
+  document_action: 'comment',
+  confluence_page_id: '12345',
+  status: 'draft',
+  created_at: '2026-05-29T10:00:00Z',
+} as any;
+
+describe('NudgeService.buildPreMeetingMessage', () => {
+  it('includes the meeting purpose between intro and requested checklist', () => {
+    const service = new NudgeService(makePool());
+    const msg = service.buildPreMeetingMessage(baseMeeting);
+
+    expect(msg.text).toContain('Review the proposed roadmap and flag anything blocking your team');
+    const introIdx = msg.text.indexOf('needs your async input');
+    const purposeIdx = msg.text.indexOf('Review the proposed roadmap');
+    const requestedIdx = msg.text.indexOf('Requested:');
+    expect(introIdx).toBeGreaterThanOrEqual(0);
+    expect(purposeIdx).toBeGreaterThan(introIdx);
+    expect(requestedIdx).toBeGreaterThan(purposeIdx);
+
+    const blockText = (msg.blocks[0] as any).text.text;
+    expect(blockText).toContain('Review the proposed roadmap');
+  });
+
+  it('escapes &, <, > in purpose', () => {
+    const service = new NudgeService(makePool());
+    const meeting = { ...baseMeeting, purpose: 'A & B <script>' };
+    const msg = service.buildPreMeetingMessage(meeting);
+    const blockText = (msg.blocks[0] as any).text.text;
+    expect(blockText).toContain('A &amp; B &lt;script&gt;');
+    expect(blockText).not.toContain('A & B <script>');
+  });
+});
+
+describe('NudgeService.buildReminderMessage', () => {
+  it('includes the meeting purpose', () => {
+    const service = new NudgeService(makePool());
+    const text = service.buildReminderMessage(baseMeeting);
+    expect(text).toContain('Review the proposed roadmap');
+  });
+});
+
+describe('NudgeService.buildFollowUpMessage', () => {
+  it('includes the meeting purpose', () => {
+    const service = new NudgeService(makePool());
+    const text = service.buildFollowUpMessage(baseMeeting);
+    expect(text).toContain('Review the proposed roadmap');
   });
 });
 
