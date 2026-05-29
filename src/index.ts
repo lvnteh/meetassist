@@ -12,6 +12,7 @@ import { registerCommands } from './bot/commands';
 import { registerActions } from './bot/actions';
 import { startScheduler } from './scheduler/cron';
 import { configureDashboard } from './services/dashboard';
+import { startDashboardServer } from './services/dashboard-server';
 import { configureVerification } from './services/verification';
 
 async function main() {
@@ -32,6 +33,12 @@ async function main() {
     nudgeService,
   });
   console.log('[boot] Dashboard will be written to ./dashboard.html');
+
+  startDashboardServer({
+    filePath: './dashboard.html',
+    port: Number(process.env.PORT ?? 3000),
+    token: process.env.DASHBOARD_TOKEN ?? null,
+  });
 
   configureVerification({
     meetingService,
