@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { NudgeService } from '../../src/services/nudge';
+
+function makePool(rows: any[] = []) {
+  return { query: vi.fn().mockResolvedValue({ rows }) } as any;
+}
 
 // NudgeService message builders are pure functions — test them without a DB
 const mockMeeting = {
@@ -36,5 +40,30 @@ describe('NudgeService message builders', () => {
     const text = nudgeService.buildFollowUpMessage(mockMeeting);
     expect(text).toContain('Roadmap Review');
     expect(text).toContain('comment');
+  });
+});
+
+describe('NudgeService.getLatestReply', () => {
+  it('returns the most recent participant message text', async () => {
+    const pool = makePool([{ raw_text: 'looks good' }]);
+    const service = new NudgeService(pool);
+
+    const reply = await service.getLatestReply('mtg-1', 'user-1');
+
+    expect(reply).toBe('looks good');
+    const sql = pool.query.mock.calls[0][0];
+    expect(sql).toContain('participant_messages');
+    expect(sql).toContain('ORDER BY created_at DESC');
+    expect(sql).toContain('LIMIT 1');
+    expect(pool.query.mock.calls[0][1]).toEqual(['mtg-1', 'user-1']);
+  });
+
+  it('returns null when no messages exist', async () => {
+    const pool = makePool([]);
+    const service = new NudgeService(pool);
+
+    const reply = await service.getLatestReply('mtg-1', 'user-1');
+
+    expect(reply).toBeNull();
   });
 });

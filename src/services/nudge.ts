@@ -113,6 +113,17 @@ export class NudgeService {
     return rows[0];
   }
 
+  async getLatestReply(meetingId: string, userId: string): Promise<string | null> {
+    const { rows } = await this.pool.query(
+      `SELECT raw_text FROM participant_messages
+       WHERE meeting_id = $1 AND user_id = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [meetingId, userId]
+    );
+    return rows[0]?.raw_text ?? null;
+  }
+
   async recordOperatorReply(participantMessageId: string, rawText: string): Promise<void> {
     const id = uuidv4();
     const sent_at = new Date().toISOString();
