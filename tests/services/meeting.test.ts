@@ -107,4 +107,58 @@ describe('MeetingService', () => {
     expect(call[0]).toContain('purpose = $2');
     expect(call[1]).toEqual(['comment', '', 'm1']);
   });
+
+  it('setControlMessage updates control_channel_id and control_message_ts', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.setControlMessage('m1', 'C123', '1700000000.000100');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('UPDATE meetings');
+    expect(call[0]).toContain('control_channel_id');
+    expect(call[0]).toContain('control_message_ts');
+    expect(call[1]).toEqual(['C123', '1700000000.000100', 'm1']);
+  });
+
+  it('setLastCardProgress updates last_card_progress', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.setLastCardProgress('m1', '2/5/1');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('UPDATE meetings');
+    expect(call[0]).toContain('last_card_progress');
+    expect(call[1]).toEqual(['2/5/1', 'm1']);
+  });
+
+  it('getMeetingsWithStaleCard SQL filters by control_message_ts and joins meeting_participants', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    await service.getMeetingsWithStaleCard();
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('control_message_ts IS NOT NULL');
+    expect(call[0]).toContain('meeting_participants');
+    expect(call[0]).toContain('progress_signature');
+  });
+
+  it('getMeetingsWithStaleCard filters out rows with matching signature', async () => {
+    const rows = [
+      { id: 'm1', last_card_progress: '1/3/0', progress_signature: '1/3/0' },
+      { id: 'm2', last_card_progress: '0/3/0', progress_signature: '1/3/0' },
+      { id: 'm3', last_card_progress: null, progress_signature: '0/2/0' },
+    ];
+    const pool = makePool(rows);
+    const service = new MeetingService(pool);
+    const result = await service.getMeetingsWithStaleCard();
+    expect(result.map((r) => r.id)).toEqual(['m2', 'm3']);
+  });
+
+  it('getMeetingsWithStaleCard returns empty when all signatures match', async () => {
+    const rows = [
+      { id: 'm1', last_card_progress: '1/3/0', progress_signature: '1/3/0' },
+      { id: 'm2', last_card_progress: '2/4/1', progress_signature: '2/4/1' },
+    ];
+    const pool = makePool(rows);
+    const service = new MeetingService(pool);
+    const result = await service.getMeetingsWithStaleCard();
+    expect(result).toEqual([]);
+  });
 });

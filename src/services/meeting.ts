@@ -179,6 +179,36 @@ export class MeetingService {
     );
   }
 
+  async setControlMessage(meetingId: string, channelId: string, ts: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE meetings SET control_channel_id = $1, control_message_ts = $2 WHERE id = $3`,
+      [channelId, ts, meetingId]
+    );
+  }
+
+  async setLastCardProgress(meetingId: string, signature: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE meetings SET last_card_progress = $1 WHERE id = $2`,
+      [signature, meetingId]
+    );
+  }
+
+  async getMeetingsWithStaleCard(): Promise<Array<Meeting & { progress_signature: string }>> {
+    const { rows } = await this.pool.query(
+      `SELECT m.*,
+        (
+          SELECT COUNT(*) FILTER (WHERE status = 'completed')::text || '/' ||
+                 COUNT(*)::text || '/' ||
+                 COUNT(*) FILTER (WHERE status = 'blocked')::text
+          FROM meeting_participants WHERE meeting_id = m.id
+        ) AS progress_signature
+       FROM meetings m
+       WHERE m.control_message_ts IS NOT NULL
+         AND m.status IN ('draft','active','cancelled')`
+    );
+    return (rows as Array<any>).filter((r) => r.progress_signature !== r.last_card_progress);
+  }
+
   async autoSeedFromSlack(slackUserId: string, client: WebClient): Promise<User> {
     const existing = await this.getUserBySlackId(slackUserId);
     if (existing) return existing;
