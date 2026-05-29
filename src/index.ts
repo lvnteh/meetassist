@@ -14,6 +14,9 @@ import { startScheduler } from './scheduler/cron';
 import { configureDashboard } from './services/dashboard';
 import { startDashboardServer } from './services/dashboard-server';
 import { configureVerification } from './services/verification';
+import { registerModalHandlers } from './bot/modals';
+import { registerControlActions } from './bot/control-actions';
+import { bootstrapOperatorDms } from './bot/dm-bootstrap';
 
 async function main() {
   await createTables(pool);
@@ -50,6 +53,8 @@ async function main() {
 
   registerCommands(meetingService, nudgeService, relayService, confluenceService);
   registerActions(meetingService, relayService);
+  registerModalHandlers(meetingService, confluenceService);
+  registerControlActions(meetingService, nudgeService, relayService);
   relayService.registerDmListener(meetingService);
 
   startScheduler(meetingService, relayService);
@@ -68,6 +73,8 @@ async function main() {
       });
     });
   }
+
+  await bootstrapOperatorDms(pool, meetingService, app.client, operatorIds);
 
   console.log('Meetassist is running');
 
