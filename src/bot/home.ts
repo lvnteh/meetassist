@@ -290,4 +290,125 @@ export function registerHome(
       console.error('[home_set_action_submit] error:', err);
     }
   });
+
+  app.action('home_create_meeting', async ({ ack, body, client }) => {
+    await ack();
+    const slackUserId = body.user.id;
+    if (!isOperator(slackUserId)) return;
+
+    try {
+      const actionOptions = ['read', 'comment', 'approve', 'provide_input', 'confirm_decision'].map((a) => ({
+        text: { type: 'plain_text', text: a },
+        value: a,
+      }));
+
+      await client.views.open({
+        trigger_id: (body as any).trigger_id,
+        view: {
+          type: 'modal',
+          callback_id: 'home_create_meeting_submit',
+          title: { type: 'plain_text', text: 'New meeting' },
+          submit: { type: 'plain_text', text: 'Create' },
+          close: { type: 'plain_text', text: 'Cancel' },
+          blocks: [
+            {
+              type: 'input', block_id: 'title_block',
+              label: { type: 'plain_text', text: 'Meeting title' },
+              element: { type: 'plain_text_input', action_id: 'title' },
+            },
+            {
+              type: 'input', block_id: 'time_block',
+              label: { type: 'plain_text', text: 'Date and time' },
+              element: { type: 'datetimepicker', action_id: 'time' },
+            },
+            {
+              type: 'input', block_id: 'purpose_block',
+              label: { type: 'plain_text', text: 'Meeting purpose' },
+              element: { type: 'plain_text_input', action_id: 'purpose', multiline: true },
+            },
+            {
+              type: 'input', block_id: 'doc_url_block',
+              label: { type: 'plain_text', text: 'Confluence page URL' },
+              element: { type: 'plain_text_input', action_id: 'doc_url' },
+            },
+            {
+              type: 'input', block_id: 'doc_title_block',
+              label: { type: 'plain_text', text: 'Document title' },
+              element: { type: 'plain_text_input', action_id: 'doc_title' },
+            },
+            {
+              type: 'input', block_id: 'action_block',
+              label: { type: 'plain_text', text: 'Required action' },
+              element: { type: 'static_select', action_id: 'action', options: actionOptions as any },
+            },
+            {
+              type: 'input', block_id: 'participants_block',
+              label: { type: 'plain_text', text: 'Participants' },
+              element: { type: 'multi_users_select', action_id: 'participants' },
+            },
+          ],
+        },
+      });
+    } catch (err: any) {
+      console.error('[home_create_meeting] open error:', err);
+    }
+  });
+
+  app.view('home_create_meeting_submit', async ({ ack, view, body, client }) => {
+    const values = view.state.values as any;
+    const title = values.title_block.title.value;
+    const timeUnix = values.time_block.time.selected_date_time;
+    const purpose = values.purpose_block.purpose.value;
+    const docUrl = values.doc_url_block.doc_url.value as string;
+    const docTitle = values.doc_title_block.doc_title.value;
+    const action = values.action_block.action.selected_option.value;
+    const participantSlackIds = values.participants_block.participants.selected_users as string[];
+
+    if (!docUrl.match(/\/pages\/\d+/)) {
+      await ack({
+        response_action: 'errors',
+        errors: { doc_url_block: 'URL must contain /pages/<id>' },
+      } as any);
+      return;
+    }
+
+    await ack();
+
+    const slackUserId = body.user.id;
+    try {
+      const operatorUser = await meetingService.getUserBySlackId(slackUserId);
+      if (!operatorUser) {
+        await app.client.chat.postEphemeral({
+          channel: slackUserId, user: slackUserId,
+          text: 'Meetassist: Operator user not found in DB.',
+        });
+        return;
+      }
+      const startTime = new Date(timeUnix * 1000).toISOString();
+      const meeting = await meetingService.createMeeting({
+        title, start_time: startTime, organizer_user_id: operatorUser.id, purpose,
+        document_url: docUrl, document_title: docTitle, document_action: action,
+      });
+      const failed: string[] = [];
+      for (const sid of participantSlackIds) {
+        try {
+          const u = await meetingService.autoSeedFromSlack(sid, client as any);
+          await meetingService.addParticipant(meeting.id, u.id, 'participant');
+        } catch (err: any) {
+          console.error(`[home_create_meeting_submit] autoSeed failed for ${sid}:`, err?.data ?? err?.message ?? err);
+          failed.push(sid);
+        }
+      }
+      await meetingService.updateStatus(meeting.id, 'active');
+      await publishHomeViews([slackUserId, ...participantSlackIds]);
+
+      const failNote = failed.length > 0 ? `\n⚠️ Could not look up: ${failed.join(', ')}` : '';
+      await app.client.chat.postEphemeral({
+        channel: slackUserId, user: slackUserId,
+        text: `Meetassist: Meeting created. *${title}* — \`${meeting.id.slice(0, 8)}\`${failNote}`,
+      });
+    } catch (err: any) {
+      console.error('[home_create_meeting_submit] error:', err);
+    }
+  });
 }
