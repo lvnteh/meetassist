@@ -1,4 +1,5 @@
 import { app } from './app';
+import { publishHomeViews } from './home';
 import type { MeetingService } from '../services/meeting';
 import type { NudgeService } from '../services/nudge';
 import type { RelayService } from './relay';
@@ -129,6 +130,7 @@ export function registerCommands(
           }
         }
         const errorNote = errors.length > 0 ? `\n⚠️ Failed to send to: ${errors.join(', ')}` : '';
+        await publishHomeViews([command.user_id, ...participants.map((p) => p.slack_user_id)]);
         await respond({ response_type: 'ephemeral', text: `Meetassist: Pre-meeting nudge sent to ${sent} participant(s).${errorNote}` });
         break;
       }
@@ -163,6 +165,7 @@ export function registerCommands(
           await meetingService.incrementReminderCount(meetingId, p.user_id);
           sent++;
         }
+        await publishHomeViews([command.user_id, ...participants.map((p) => p.slack_user_id)]);
         await respond({ response_type: 'ephemeral', text: `Meetassist: Reminder sent to ${sent} participant(s).` });
         break;
       }
@@ -196,6 +199,7 @@ export function registerCommands(
           });
           sent++;
         }
+        await publishHomeViews([command.user_id, ...participants.map((p) => p.slack_user_id)]);
         await respond({ response_type: 'ephemeral', text: `Meetassist: Follow-up sent to ${sent} participant(s).` });
         break;
       }
@@ -236,6 +240,7 @@ export function registerCommands(
         for (const p of participants) {
           await meetingService.updateParticipantStatus(meetingId, p.user_id, 'pending');
         }
+        await publishHomeViews([command.user_id, ...participants.map((p) => p.slack_user_id)]);
         await respond({ response_type: 'ephemeral', text: `Meetassist: Action updated to \`${newAction}\`. All participants reset to pending. Use \`/ma send ${parts[1]}\` to send the new nudge.` });
         break;
       }
@@ -419,6 +424,7 @@ export function registerCommands(
         const failedWarning = failedIds.length > 0
           ? `\n⚠️ Could not look up these IDs (check they're valid Slack IDs): ${failedIds.join(', ')}`
           : '';
+        await publishHomeViews([msg.user, ...session.participants!]);
         await say(
           `Meetassist: Meeting created.\n*${meeting.title}* — \`${meeting.id.slice(0, 8)}\`\nParticipants added. Use \`/ma send ${meeting.id.slice(0, 8)}\` to send nudges.${failedWarning}`
         );
