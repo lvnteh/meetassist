@@ -2,6 +2,7 @@ import { app } from './app';
 import type { MeetingService } from '../services/meeting';
 import type { RelayService } from './relay';
 import { publishDashboard } from '../services/dashboard';
+import { updateControlCard } from './control-card';
 import { handleVerificationNudgeYes, handleVerificationNudgeSkip, scheduleVerification } from '../services/verification';
 
 export function registerActions(
@@ -29,6 +30,10 @@ export function registerActions(
       );
     }
     await publishDashboard();
+    const refreshed = await meetingService.getById(meetingId);
+    if (refreshed) {
+      await updateControlCard(app.client, meetingService, refreshed);
+    }
     scheduleVerification(meetingId, user.id);
   });
 
@@ -53,6 +58,10 @@ export function registerActions(
       );
     }
     await publishDashboard();
+    const refreshed = await meetingService.getById(meetingId);
+    if (refreshed) {
+      await updateControlCard(app.client, meetingService, refreshed);
+    }
   });
 
   app.action('cannot_complete', async ({ ack, body, action }) => {
@@ -76,6 +85,10 @@ export function registerActions(
       );
     }
     await publishDashboard();
+    const refreshed = await meetingService.getById(meetingId);
+    if (refreshed) {
+      await updateControlCard(app.client, meetingService, refreshed);
+    }
   });
 
   app.action('open_document', async ({ ack }) => {
