@@ -2,7 +2,7 @@ import { app } from './app';
 import type { MeetingService } from '../services/meeting';
 import type { RelayService } from './relay';
 import { publishDashboard } from '../services/dashboard';
-import { handleVerificationNudgeYes, handleVerificationNudgeSkip } from '../services/verification';
+import { handleVerificationNudgeYes, handleVerificationNudgeSkip, scheduleVerification } from '../services/verification';
 
 export function registerActions(
   meetingService: MeetingService,
@@ -29,6 +29,7 @@ export function registerActions(
       );
     }
     await publishDashboard();
+    scheduleVerification(meetingId, user.id);
   });
 
   app.action('need_clarification', async ({ ack, body, action }) => {
