@@ -215,4 +215,79 @@ export function registerHome(
       await relayService.notifyOperator(`[Meetassist] Doc check failed: ${err.message}`);
     }
   });
+
+  app.action('home_set_action', async ({ ack, body, action, client }) => {
+    await ack();
+    const meetingId = (action as any).value as string;
+    const slackUserId = body.user.id;
+    if (!isOperator(slackUserId)) return;
+
+    try {
+      const meeting = await meetingService.getById(meetingId);
+      if (!meeting) return;
+
+      const options = ['read', 'comment', 'approve', 'provide_input', 'confirm_decision'].map((a) => ({
+        text: { type: 'plain_text', text: a },
+        value: a,
+      }));
+
+      await client.views.open({
+        trigger_id: (body as any).trigger_id,
+        view: {
+          type: 'modal',
+          callback_id: 'home_set_action_submit',
+          private_metadata: meetingId,
+          title: { type: 'plain_text', text: 'Change action' },
+          submit: { type: 'plain_text', text: 'Change' },
+          close: { type: 'plain_text', text: 'Cancel' },
+          blocks: [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*${meeting.title}*\nCurrent action: \`${meeting.document_action}\`` },
+            },
+            {
+              type: 'input',
+              block_id: 'action_block',
+              label: { type: 'plain_text', text: 'New action' },
+              element: {
+                type: 'static_select',
+                action_id: 'new_action',
+                options: options as any,
+                initial_option: { text: { type: 'plain_text', text: meeting.document_action }, value: meeting.document_action },
+              },
+            },
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: '_All participants will be reset to pending. You\'ll need to send a new nudge afterwards._' },
+            },
+          ],
+        },
+      });
+    } catch (err: any) {
+      console.error('[home_set_action] open error:', err);
+    }
+  });
+
+  app.view('home_set_action_submit', async ({ ack, view, body }) => {
+    await ack();
+    const meetingId = view.private_metadata;
+    const newAction = (view.state.values as any).action_block.new_action.selected_option.value;
+    const slackUserId = body.user.id;
+
+    try {
+      await meetingService.updateAction(meetingId, newAction);
+      const participants = await meetingService.getParticipantsWithUsers(meetingId);
+      for (const p of participants) {
+        await meetingService.updateParticipantStatus(meetingId, p.user_id, 'pending');
+      }
+      const targetIds = [slackUserId, ...participants.map((p) => p.slack_user_id)];
+      await publishHomeViews(targetIds);
+      await app.client.chat.postEphemeral({
+        channel: slackUserId, user: slackUserId,
+        text: `Meetassist: Action updated to \`${newAction}\`. All participants reset to pending.`,
+      });
+    } catch (err: any) {
+      console.error('[home_set_action_submit] error:', err);
+    }
+  });
 }
