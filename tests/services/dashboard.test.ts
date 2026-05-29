@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { relativeTime, escapeXml, humaniseStatus, humaniseAction } from '../../src/services/dashboard';
+import { relativeTime, escapeXml, humaniseStatus, humaniseAction, renderDashboardBody } from '../../src/services/dashboard';
 
 describe('relativeTime', () => {
   const now = new Date('2026-05-29T10:00:00Z');
@@ -67,5 +67,17 @@ describe('humaniseAction', () => {
 
   it('falls back to the raw value for unknown action', () => {
     expect(humaniseAction('weird_action' as any)).toBe('weird_action');
+  });
+});
+
+describe('renderDashboardBody — empty state', () => {
+  const now = new Date('2026-05-29T10:30:00Z');
+
+  it('renders the info macro and a "No active meetings" message', () => {
+    const body = renderDashboardBody({ meetings: [], now });
+
+    expect(body).toContain('<ac:structured-macro ac:name="info">');
+    expect(body).toContain('Last updated:');
+    expect(body).toContain('No active meetings');
   });
 });

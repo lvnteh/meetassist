@@ -49,3 +49,45 @@ const ACTION_LABELS: Record<DocumentAction, string> = {
 export function humaniseAction(action: DocumentAction): string {
   return ACTION_LABELS[action] ?? (action as string);
 }
+
+export interface DashboardMeeting {
+  id: string;
+  title: string;
+  start_time: string;
+  document_url: string;
+  document_title: string;
+  document_action: DocumentAction;
+  participants: DashboardParticipant[];
+}
+
+export interface DashboardParticipant {
+  slack_user_id: string;
+  display_name: string;
+  status: ParticipantStatus;
+  updated_at: string | null;
+  latest_reply: string | null;
+}
+
+export interface DashboardInput {
+  meetings: DashboardMeeting[];
+  now: Date;
+}
+
+function renderHeader(now: Date): string {
+  const stamp = now.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  return [
+    '<ac:structured-macro ac:name="info">',
+    '  <ac:rich-text-body>',
+    `    <p>Last updated: ${escapeXml(stamp)}</p>`,
+    '  </ac:rich-text-body>',
+    '</ac:structured-macro>',
+  ].join('\n');
+}
+
+export function renderDashboardBody(input: DashboardInput): string {
+  const header = renderHeader(input.now);
+  if (input.meetings.length === 0) {
+    return [header, '', '<p><em>No active meetings.</em></p>'].join('\n');
+  }
+  return header;
+}
