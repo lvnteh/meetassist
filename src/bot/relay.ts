@@ -1,6 +1,8 @@
 import { app } from './app';
 import type { MeetingService } from '../services/meeting';
 import type { NudgeService } from '../services/nudge';
+import { publishHomeViews } from './home';
+import { getOperatorIds } from './roles';
 
 export class RelayService {
   constructor(
@@ -79,6 +81,8 @@ export class RelayService {
         text,
         meetingTitle: meeting.title,
       });
+
+      await publishHomeViews([slackUserId, ...getOperatorIds()]);
     });
   }
 }
