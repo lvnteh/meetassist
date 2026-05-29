@@ -50,6 +50,48 @@ export class ConfluenceService {
     }));
   }
 
+  async getPageVersion(pageId: string): Promise<number> {
+    const response = await axios.get(
+      `${this.baseUrl}/wiki/rest/api/content/${pageId}?expand=version`,
+      { headers: { Authorization: this.authHeader, Accept: 'application/json' } }
+    );
+    return response.data.version.number;
+  }
+
+  async updatePage(pageId: string, title: string, body: string): Promise<void> {
+    const attempt = async (version: number) => {
+      await axios.put(
+        `${this.baseUrl}/wiki/rest/api/content/${pageId}`,
+        {
+          id: pageId,
+          type: 'page',
+          title,
+          version: { number: version + 1 },
+          body: { storage: { value: body, representation: 'storage' } },
+        },
+        {
+          headers: {
+            Authorization: this.authHeader,
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+    };
+
+    const initialVersion = await this.getPageVersion(pageId);
+    try {
+      await attempt(initialVersion);
+    } catch (err: any) {
+      if (err?.response?.status === 409) {
+        const refreshed = await this.getPageVersion(pageId);
+        await attempt(refreshed);
+      } else {
+        throw err;
+      }
+    }
+  }
+
   buildDocCheckSummary(
     page: ConfluencePage,
     comments: ConfluenceComment[],
