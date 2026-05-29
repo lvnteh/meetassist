@@ -76,3 +76,54 @@ describe('ConfluenceService.updatePage', () => {
     await expect(service.updatePage('123', 'T', '<p>x</p>')).rejects.toBe(conflict);
   });
 });
+
+describe('ConfluenceService — existing methods', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('getPage returns structured page data', async () => {
+    (axios.get as any).mockResolvedValueOnce({
+      data: {
+        id: '123456',
+        title: 'Q3 Roadmap',
+        version: { number: 5 },
+        history: {
+          lastUpdated: {
+            by: { displayName: 'Tom H' },
+            when: '2026-05-27T10:00:00Z',
+          },
+        },
+        body: {
+          storage: { value: '<p>Doc content here</p>' },
+        },
+      },
+    });
+
+    const service = new ConfluenceService(config);
+    const page = await service.getPage('123456');
+    expect(page.title).toBe('Q3 Roadmap');
+    expect(page.version).toBe(5);
+    expect(page.lastModifiedBy).toBe('Tom H');
+  });
+
+  it('getComments returns array of comments', async () => {
+    (axios.get as any).mockResolvedValueOnce({
+      data: {
+        results: [
+          {
+            body: { storage: { value: '<p>Looks good</p>' } },
+            author: { displayName: 'Sarah J', email: 'sarah@example.com' },
+            created: '2026-05-27T11:00:00Z',
+          },
+        ],
+      },
+    });
+
+    const service = new ConfluenceService(config);
+    const comments = await service.getComments('123456');
+    expect(comments.length).toBe(1);
+    expect(comments[0].authorDisplayName).toBe('Sarah J');
+    expect(comments[0].bodyText).toBe('Looks good');
+  });
+});
