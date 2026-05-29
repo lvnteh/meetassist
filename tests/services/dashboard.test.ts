@@ -38,6 +38,11 @@ describe('escapeXml', () => {
     expect(escapeXml(null)).toBe('');
     expect(escapeXml(undefined)).toBe('');
   });
+
+  it('strips C0 control characters that are invalid in XML 1.0', () => {
+    expect(escapeXml('a\x00b\x07c\x1Fd')).toBe('abcd');
+    expect(escapeXml('hello\tworld\nfoo')).toBe('hello\tworld\nfoo');
+  });
 });
 
 describe('humaniseStatus', () => {
