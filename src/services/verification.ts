@@ -156,9 +156,13 @@ export async function handleVerificationNudgeYes(value: string, respond: Respond
 }
 
 export async function handleVerificationNudgeSkip(_value: string, respond: RespondFn): Promise<void> {
-  await respond({
-    replace_original: true,
-    text: 'Skipped.',
-    blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Skipped.' } }],
-  });
+  try {
+    await respond({
+      replace_original: true,
+      text: 'Skipped.',
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Skipped.' } }],
+    });
+  } catch (err: any) {
+    console.error('[verification] nudge_skip failed:', err?.response?.data ?? err?.message ?? err);
+  }
 }
