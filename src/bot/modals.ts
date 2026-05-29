@@ -87,3 +87,111 @@ export function buildChangeActionModal(meetingId: string, currentAction: string)
     ],
   };
 }
+
+import type { MeetingService } from '../services/meeting';
+import type { ConfluenceService } from '../services/confluence';
+import { postControlCard, updateControlCard } from './control-card';
+
+export function registerModalHandlers(
+  meetingService: MeetingService,
+  confluenceService: ConfluenceService,
+): void {
+  // Lazy-load modules whose own imports eagerly construct the Bolt App
+  // singleton — keeps this module importable from tests that exercise only
+  // the pure builder functions without env-var setup.
+  const { app } = require('./app') as typeof import('./app');
+  const { unwrapSlackUrl } = require('./commands') as typeof import('./commands');
+
+  // Open the create modal from the persistent DM button
+  app.action('open_create_modal', async ({ ack, body, client }) => {
+    await ack();
+    await client.views.open({
+      trigger_id: (body as any).trigger_id,
+      view: buildCreateMeetingModal(),
+    });
+  });
+
+  // Handle the create-meeting modal submission
+  app.view('create_meeting_modal', async ({ ack, body, view, client }) => {
+    const values: any = view.state.values;
+    const title: string = values.title?.value?.value?.trim() ?? '';
+    const rawUrl: string = values.document_url?.value?.value?.trim() ?? '';
+    const documentUrl = unwrapSlackUrl(rawUrl);
+    const action: string = values.action?.value?.selected_option?.value ?? '';
+    const purpose: string = values.purpose?.value?.value?.trim() ?? '';
+    const startEpoch: number | undefined = values.start_time?.value?.selected_date_time;
+    const participantIds: string[] = values.participants?.value?.selected_users ?? [];
+
+    const errors: Record<string, string> = {};
+    if (!title) errors.title = 'Title is required';
+    const pageMatch = documentUrl.match(/\/pages\/(\d+)/);
+    if (!pageMatch) errors.document_url = 'URL must contain /pages/<id>';
+    if (!startEpoch || startEpoch * 1000 <= Date.now()) errors.start_time = 'Start time must be in the future';
+    if (participantIds.length === 0) errors.participants = 'Pick at least one participant';
+    if (!action) errors.action = 'Pick an action';
+
+    if (Object.keys(errors).length > 0) {
+      await ack({ response_action: 'errors', errors } as any);
+      return;
+    }
+    await ack();
+
+    try {
+      const operatorSlackId = body.user.id;
+      const operator = await meetingService.autoSeedFromSlack(operatorSlackId, client as any);
+
+      // Best-effort fetch of the document title from Confluence; fall back to the modal title
+      let documentTitle = title;
+      const pageId = pageMatch![1];
+      try {
+        const page = await confluenceService.getPage(pageId);
+        if (page?.title) documentTitle = page.title;
+      } catch (err: any) {
+        console.error('[modal] confluenceService.getPage failed, falling back to meeting title:', err?.message ?? err);
+      }
+
+      const meeting = await meetingService.createMeeting({
+        title,
+        start_time: new Date(startEpoch! * 1000).toISOString(),
+        organizer_user_id: operator.id,
+        purpose,
+        document_url: documentUrl,
+        document_title: documentTitle,
+        document_action: action,
+      });
+      await meetingService.updateStatus(meeting.id, 'active');
+
+      for (const slackId of participantIds) {
+        const u = await meetingService.autoSeedFromSlack(slackId, client as any);
+        await meetingService.addParticipant(meeting.id, u.id, 'participant');
+      }
+
+      // Post control card into the operator DM
+      const dm = await client.conversations.open({ users: operatorSlackId });
+      const channelId = (dm.channel as any)?.id;
+      if (channelId) {
+        const refreshed = (await meetingService.getById(meeting.id))!;
+        await postControlCard(client as any, meetingService, refreshed, channelId);
+      }
+    } catch (err: any) {
+      console.error('[modal] create_meeting_modal handler failed:', err?.message ?? err);
+    }
+  });
+
+  // Handle the change-action modal submission
+  app.view('change_action_modal', async ({ ack, view, client }) => {
+    await ack();
+    const meetingId = view.private_metadata;
+    const action = (view.state.values as any).action?.value?.selected_option?.value;
+    if (!meetingId || !action) return;
+    try {
+      await meetingService.updateAction(meetingId, action);
+      const meeting = await meetingService.getById(meetingId);
+      if (meeting) {
+        await updateControlCard(client as any, meetingService, meeting);
+      }
+    } catch (err: any) {
+      console.error('[modal] change_action_modal handler failed:', err?.message ?? err);
+    }
+  });
+}
