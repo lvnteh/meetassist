@@ -57,7 +57,7 @@ async function main() {
   registerControlActions(meetingService, nudgeService, relayService);
   relayService.registerDmListener(meetingService);
 
-  startScheduler(meetingService, relayService);
+  startScheduler(meetingService, relayService, app.client);
 
   await app.start();
 

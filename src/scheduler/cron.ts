@@ -1,10 +1,13 @@
 import cron from 'node-cron';
+import type { WebClient } from '@slack/web-api';
 import type { MeetingService } from '../services/meeting';
 import type { RelayService } from '../bot/relay';
+import { updateControlCard } from '../bot/control-card';
 
 export function startScheduler(
   meetingService: MeetingService,
-  relayService: RelayService
+  relayService: RelayService,
+  client: WebClient,
 ): void {
   cron.schedule('0 * * * *', async () => {
     const now = new Date().toISOString();
@@ -47,5 +50,16 @@ export function startScheduler(
     }
 
     await relayService.notifyOperator(lines.join('\n'));
+  });
+
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const stale = await meetingService.getMeetingsWithStaleCard();
+      for (const m of stale) {
+        await updateControlCard(client, meetingService, m as any);
+      }
+    } catch (err: any) {
+      console.error('[scheduler] card refresh failed:', err?.message ?? err);
+    }
   });
 }
