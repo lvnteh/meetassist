@@ -1,4 +1,4 @@
-export type MeetingStatus = 'draft' | 'active' | 'completed';
+export type MeetingStatus = 'draft' | 'active' | 'completed' | 'cancelled';
 export type DocumentAction = 'read' | 'comment' | 'approve' | 'provide_input' | 'confirm_decision';
 export type ParticipantStatus =
   | 'pending'
