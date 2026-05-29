@@ -4,6 +4,7 @@ import type { NudgeService } from '../services/nudge';
 import type { RelayService } from './relay';
 import type { ConfluenceService } from '../services/confluence';
 import type { DocumentAction } from '../types';
+import { publishDashboard } from '../services/dashboard';
 
 const createSessions = new Map<string, Partial<{
   title: string;
@@ -129,6 +130,7 @@ export function registerCommands(
           }
         }
         const errorNote = errors.length > 0 ? `\n⚠️ Failed to send to: ${errors.join(', ')}` : '';
+        await publishDashboard();
         await respond({ response_type: 'ephemeral', text: `Meetassist: Pre-meeting nudge sent to ${sent} participant(s).${errorNote}` });
         break;
       }
@@ -163,6 +165,7 @@ export function registerCommands(
           await meetingService.incrementReminderCount(meetingId, p.user_id);
           sent++;
         }
+        await publishDashboard();
         await respond({ response_type: 'ephemeral', text: `Meetassist: Reminder sent to ${sent} participant(s).` });
         break;
       }
@@ -196,6 +199,7 @@ export function registerCommands(
           });
           sent++;
         }
+        await publishDashboard();
         await respond({ response_type: 'ephemeral', text: `Meetassist: Follow-up sent to ${sent} participant(s).` });
         break;
       }
@@ -236,6 +240,7 @@ export function registerCommands(
         for (const p of participants) {
           await meetingService.updateParticipantStatus(meetingId, p.user_id, 'pending');
         }
+        await publishDashboard();
         await respond({ response_type: 'ephemeral', text: `Meetassist: Action updated to \`${newAction}\`. All participants reset to pending. Use \`/ma send ${parts[1]}\` to send the new nudge.` });
         break;
       }
@@ -415,6 +420,7 @@ export function registerCommands(
         }
 
         await meetingService.updateStatus(meeting.id, 'active');
+        await publishDashboard();
 
         const failedWarning = failedIds.length > 0
           ? `\n⚠️ Could not look up these IDs (check they're valid Slack IDs): ${failedIds.join(', ')}`
