@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import type { Meeting, Nudge, NudgeType, ParticipantMessage } from '../types';
+import { escapeForSlack } from './verification';
 
 interface NudgeInput {
   user_id: string;
@@ -30,10 +31,6 @@ const ACTION_LABELS: Record<string, string> = {
   confirm_decision: 'Confirm the decision',
 };
 
-function escapeMrkdwn(s: string): string {
-  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 export class NudgeService {
   constructor(private pool: Pool) {}
 
@@ -54,7 +51,7 @@ export class NudgeService {
     const dateStr = meetingDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
     const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    const purposeEscaped = escapeMrkdwn(meeting.purpose);
+    const purposeEscaped = escapeForSlack(meeting.purpose);
 
     const text = `Meetassist: ${meeting.title} needs your async input before ${dateStr} ${timeStr}.\n\n${meeting.purpose}\n\nRequested:\n☐ ${actionLabel}\n☐ Confirm when done\n\nDocument: ${meeting.document_title}\n${meeting.document_url}`;
 

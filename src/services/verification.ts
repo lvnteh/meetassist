@@ -106,7 +106,7 @@ function humaniseActionForDm(action: string): string {
   }
 }
 
-function escapeForSlack(s: string): string {
+export function escapeForSlack(s: string): string {
   return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
