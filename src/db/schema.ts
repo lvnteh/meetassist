@@ -69,5 +69,11 @@ export async function createTables(pool: Pool): Promise<void> {
       summary TEXT,
       suggested_nudges TEXT
     );
+
+    ALTER TABLE meetings ADD COLUMN IF NOT EXISTS control_channel_id TEXT;
+    ALTER TABLE meetings ADD COLUMN IF NOT EXISTS control_message_ts TEXT;
+    ALTER TABLE meetings ADD COLUMN IF NOT EXISTS last_card_progress TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS operator_dm_channel_id TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS operator_dm_message_ts TEXT;
   `);
 }
