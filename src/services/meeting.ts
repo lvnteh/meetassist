@@ -130,6 +130,13 @@ export class MeetingService {
     return rows[0] ?? null;
   }
 
+  async getUserById(id: string): Promise<User | null> {
+    const { rows } = await this.pool.query(
+      `SELECT * FROM users WHERE id = $1`, [id]
+    );
+    return rows[0] ?? null;
+  }
+
   async upsertUser(user: Omit<User, 'id'> & { id?: string }): Promise<User> {
     const id = user.id ?? uuidv4();
     await this.pool.query(

@@ -58,4 +58,24 @@ describe('MeetingService', () => {
     const result = await service.upsertUser({ slack_user_id: 'U001', email: 'a@b.com', display_name: 'Alice' });
     expect(result.slack_user_id).toBe('U001');
   });
+
+  it('getUserById returns the user row when found', async () => {
+    const user = { id: 'u1', slack_user_id: 'U001', email: 'a@b.com', display_name: 'Alice' };
+    const pool = makePool([user]);
+    const service = new MeetingService(pool);
+    const result = await service.getUserById('u1');
+    expect(result).not.toBeNull();
+    expect(result!.slack_user_id).toBe('U001');
+    const call = pool.query.mock.calls[0];
+    expect(call[0]).toContain('users');
+    expect(call[0]).toContain('id = $1');
+    expect(call[1]).toEqual(['u1']);
+  });
+
+  it('getUserById returns null when no row', async () => {
+    const pool = makePool([]);
+    const service = new MeetingService(pool);
+    const result = await service.getUserById('missing');
+    expect(result).toBeNull();
+  });
 });
