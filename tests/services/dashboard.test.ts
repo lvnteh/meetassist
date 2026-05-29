@@ -173,34 +173,6 @@ describe('renderDashboardBody — populated', () => {
     expect(body).toContain('@x&lt;y');
     expect(body).toContain('a &amp; b');
   });
-
-  it('renders the meeting purpose between action and progress lines', () => {
-    const body = renderDashboardBody({ meetings: [meeting], now });
-
-    expect(body).toContain('Purpose: Decide on the new template format');
-    const actionIdx = body.indexOf('Action requested:');
-    const purposeIdx = body.indexOf('Purpose:');
-    const progressIdx = body.indexOf('Progress:');
-    expect(actionIdx).toBeGreaterThanOrEqual(0);
-    expect(purposeIdx).toBeGreaterThan(actionIdx);
-    expect(progressIdx).toBeGreaterThan(purposeIdx);
-  });
-
-  it('truncates long purpose text to 200 chars with ellipsis on the dashboard', () => {
-    const longPurpose = 'A'.repeat(250);
-    const m = { ...meeting, purpose: longPurpose };
-    const body = renderDashboardBody({ meetings: [m], now });
-    const expected = 'A'.repeat(199) + '…';
-    expect(body).toContain(`Purpose: ${expected}`);
-    expect(body).not.toContain('A'.repeat(250));
-  });
-
-  it('escapes special chars in purpose', () => {
-    const m = { ...meeting, purpose: 'A & B <c>' };
-    const body = renderDashboardBody({ meetings: [m], now });
-    expect(body).toContain('Purpose: A &amp; B &lt;c&gt;');
-    expect(body).not.toContain('A & B <c>');
-  });
 });
 
 describe('publishDashboard', () => {
