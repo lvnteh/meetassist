@@ -60,6 +60,7 @@ export interface DashboardMeeting {
   document_url: string;
   document_title: string;
   document_action: DocumentAction;
+  purpose: string;
   participants: DashboardParticipant[];
 }
 
@@ -97,6 +98,10 @@ function formatStartTime(iso: string): string {
   return `${wd} ${mo} ${day} · ${hh}:${mm}`;
 }
 
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 function renderMeeting(m: DashboardMeeting, now: Date): string {
   const idPrefix = m.id.slice(0, 8);
   const done = m.participants.filter((p) => p.status === 'completed').length;
@@ -124,6 +129,7 @@ function renderMeeting(m: DashboardMeeting, now: Date): string {
     `<p>${escapeXml(formatStartTime(m.start_time))} · ${escapeXml(idPrefix)}</p>`,
     `<p>Document: <ac:link><ri:url ri:value="${escapeXml(m.document_url)}" /><ac:link-body>${escapeXml(m.document_title)}</ac:link-body></ac:link></p>`,
     `<p>Action requested: ${escapeXml(humaniseAction(m.document_action))}</p>`,
+    `<p>Purpose: ${escapeXml(truncate(m.purpose, 200))}</p>`,
     `<p>${escapeXml(progress)}</p>`,
     '<table>',
     '  <tbody>',
@@ -188,6 +194,7 @@ export async function publishDashboard(): Promise<void> {
         document_url: m.document_url,
         document_title: m.document_title,
         document_action: m.document_action as DocumentAction,
+        purpose: m.purpose,
         participants,
       });
     }
