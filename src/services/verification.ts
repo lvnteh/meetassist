@@ -128,7 +128,9 @@ export async function handleVerificationNudgeYes(value: string, respond: Respond
     const actionLabel = humaniseActionForDm(meeting.document_action);
     const text =
       `Meetassist: Just checking — your action for *${escapeForSlack(meeting.title)}* was to ${actionLabel}, ` +
-      `but I don't see it on the doc yet. Could you take a moment to follow up?\n${meeting.document_url}`;
+      `but I don't see it on the doc yet. Could you take a moment to follow up?\n\n` +
+      `The ask was: ${escapeForSlack(meeting.purpose)}\n\n` +
+      `${meeting.document_url}`;
 
     const { channel, ts } = await deps.relayService.sendToParticipant({
       slackUserId: participant.slack_user_id,

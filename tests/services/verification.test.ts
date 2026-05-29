@@ -345,4 +345,24 @@ describe('verification button handlers', () => {
     expect(args.replace_original).toBe(true);
     expect(args.text).toContain('Skipped');
   });
+
+  it('handleVerificationNudgeYes includes meeting purpose in the follow-up DM', async () => {
+    const respond = vi.fn().mockResolvedValue(undefined);
+    const meetingWithPurpose = {
+      ...baseMeeting,
+      purpose: 'Review the proposed roadmap before Friday',
+    };
+    const deps = makeDeps({
+      meetingService: {
+        getById: vi.fn().mockResolvedValue(meetingWithPurpose),
+        getParticipantsWithUsers: vi.fn().mockResolvedValue([baseParticipant]),
+      },
+    });
+    configureVerification(deps as any);
+
+    await handleVerificationNudgeYes('m1|u1', respond);
+
+    const sendArgs = deps.relayService.sendToParticipant.mock.calls[0][0];
+    expect(sendArgs.text).toContain('The ask was: Review the proposed roadmap before Friday');
+  });
 });
