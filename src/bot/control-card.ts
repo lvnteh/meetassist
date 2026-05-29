@@ -72,7 +72,7 @@ export function buildControlCardBlocks(
   metaLines.push(`*Starts:* ${startStr}`);
   if (docUrl) {
     const linkLabel = meeting.document_title || 'Document';
-    metaLines.push(`*Doc:* ${linkLabel} — ${docUrl}`);
+    metaLines.push(`*Doc:* <${docUrl}|${linkLabel}>`);
   }
   metaLines.push(`*Action:* ${actionLabel}`);
   if (meeting.purpose && meeting.purpose.trim().length > 0) {

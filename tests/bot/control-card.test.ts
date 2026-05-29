@@ -69,7 +69,13 @@ describe('buildControlCardBlocks', () => {
     const blocks = buildControlCardBlocks(wrapped, participants);
     const json = JSON.stringify(blocks);
     expect(json).toContain('https://example.com/pages/123');
-    expect(json).not.toContain('<https://example.com');
+    expect(json).not.toContain('|Doc>');
+  });
+
+  it('renders document as a clickable mrkdwn link', () => {
+    const blocks = buildControlCardBlocks(baseMeeting, participants);
+    const json = JSON.stringify(blocks);
+    expect(json).toContain('<https://emarsys.jira.com/wiki/spaces/ACS/pages/6426755229/Take|Take Template Ownership>');
   });
 });
 
