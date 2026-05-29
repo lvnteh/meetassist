@@ -355,9 +355,13 @@ export function registerCommands(
       case 'start_time':
         session.start_time = text;
         session.step = 'purpose';
-        await say('What is the meeting purpose?');
+        await say('What\'s the ask for participants? They\'ll see this in their nudge. (Max 280 chars.)');
         break;
       case 'purpose':
+        if (text.length > 280) {
+          await say(`Meetassist: That's longer than 280 characters (you wrote ${text.length}). Please shorten and try again.`);
+          return;
+        }
         session.purpose = text;
         session.step = 'document_url';
         await say('Paste the Confluence page URL:');
