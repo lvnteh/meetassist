@@ -48,19 +48,18 @@ export class NudgeService {
 
   buildPreMeetingMessage(meeting: Meeting): SlackMessage {
     const meetingDate = new Date(meeting.start_time);
-    const dateStr = meetingDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const dateStr = meetingDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    const purposeEscaped = escapeForSlack(meeting.purpose);
 
-    const text = `Meetassist: ${meeting.title} needs your async input before ${dateStr} ${timeStr}.\n\n${meeting.purpose}\n\nRequested:\n☐ ${actionLabel}\n☐ Confirm when done\n\nDocument: ${meeting.document_title}\n${meeting.document_url}`;
+    const text = `${actionLabel} on ${meeting.document_title} — ${meeting.title}. Due ${dateStr} ${timeStr}.`;
 
     const blocks = [
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Meetassist:* ${meeting.title} needs your async input before *${dateStr} ${timeStr}*.\n\n${purposeEscaped}\n\nRequested:\n☐ ${actionLabel}\n☐ Confirm when done\n\n*Document:* <${meeting.document_url}|${meeting.document_title}>`,
+          text: `_ACTION NEEDED BY ${dateStr} · ${timeStr}_\n*${actionLabel}* on <${meeting.document_url}|${meeting.document_title}>\nMeeting: ${meeting.title}`,
         },
       },
       {
@@ -95,12 +94,12 @@ export class NudgeService {
 
   buildReminderMessage(meeting: Meeting): string {
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    return `Meetassist reminder: ${meeting.title} is coming up. Please ${actionLabel.toLowerCase()} and confirm.\n\n${meeting.purpose}\n\nDocument: ${meeting.document_title}\n${meeting.document_url}`;
+    return `Reminder: ${actionLabel} on ${meeting.document_title}.\nMeeting: ${meeting.title}\n${meeting.document_url}`;
   }
 
   buildFollowUpMessage(meeting: Meeting): string {
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    return `Meetassist follow-up: ${meeting.title} has passed. Your action is still open: ${actionLabel.toLowerCase()}.\n\n${meeting.purpose}\n\nDocument: ${meeting.document_title}\n${meeting.document_url}`;
+    return `Your action is still open: ${actionLabel} on ${meeting.document_title}.\nMeeting: ${meeting.title}\n${meeting.document_url}`;
   }
 
   async recordParticipantMessage(input: ParticipantMessageInput): Promise<ParticipantMessage> {
