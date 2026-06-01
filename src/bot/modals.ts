@@ -44,7 +44,8 @@ export function buildCreateMeetingModal(): any {
         type: 'input',
         block_id: 'purpose',
         optional: true,
-        label: { type: 'plain_text', text: 'Purpose / context' },
+        label: { type: 'plain_text', text: 'Context note' },
+        hint: { type: 'plain_text', text: "Tip: don't repeat the meeting name or action — add context that helps participants act." },
         element: { type: 'plain_text_input', action_id: 'value', multiline: true },
       },
       {
