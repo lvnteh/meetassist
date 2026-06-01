@@ -137,7 +137,18 @@ export function registerCommands(
         }
         const errorNote = errors.length > 0 ? `\n⚠️ Failed to send to: ${errors.join(', ')}` : '';
         await publishDashboard();
-        await respond({ response_type: 'ephemeral', text: `Meetassist: Pre-meeting nudge sent to ${sent} participant(s).${errorNote}` });
+        await respond({
+          response_type: 'ephemeral',
+          text: `Meetassist: Pre-meeting nudge sent to ${sent} participant(s).${errorNote}`,
+          blocks: [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: `*Nudge sent to ${sent} participant(s).*${errorNote}` },
+            },
+            { type: 'divider' },
+            ...blocks,
+          ],
+        });
         break;
       }
 
