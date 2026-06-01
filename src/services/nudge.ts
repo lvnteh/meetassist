@@ -59,7 +59,7 @@ export class NudgeService {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `_ACTION NEEDED BY ${dateStr} · ${timeStr}_\n*${actionLabel}* on <${meeting.document_url}|${meeting.document_title}>\nMeeting: ${meeting.title}`,
+          text: `_ACTION NEEDED BY ${dateStr} · ${timeStr}_\n*${actionLabel}* on <${meeting.document_url}|${escapeForSlack(meeting.document_title)}>\nMeeting: ${escapeForSlack(meeting.title)}`,
         },
       },
       {
@@ -94,12 +94,12 @@ export class NudgeService {
 
   buildReminderMessage(meeting: Meeting): string {
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    return `Reminder: ${actionLabel} on ${meeting.document_title}.\nMeeting: ${meeting.title}\n${meeting.document_url}`;
+    return `Reminder: ${actionLabel} on ${escapeForSlack(meeting.document_title)}.\nMeeting: ${escapeForSlack(meeting.title)}\n${meeting.document_url}`;
   }
 
   buildFollowUpMessage(meeting: Meeting): string {
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    return `Your action is still open: ${actionLabel} on ${meeting.document_title}.\nMeeting: ${meeting.title}\n${meeting.document_url}`;
+    return `Your action is still open: ${actionLabel} on ${escapeForSlack(meeting.document_title)}.\nMeeting: ${escapeForSlack(meeting.title)}\n${meeting.document_url}`;
   }
 
   async recordParticipantMessage(input: ParticipantMessageInput): Promise<ParticipantMessage> {
