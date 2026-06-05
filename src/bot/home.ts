@@ -18,19 +18,13 @@ export function buildWelcomeBlocks(): any[] {
         type: 'mrkdwn',
         text: '*Meetassist* helps you coordinate pre-meeting document actions — read, comment, or approve — and tracks who has responded.',
       },
+      accessory: {
+        type: 'button',
+        action_id: 'open_create_modal',
+        text: { type: 'plain_text', text: '➕ Create meeting' },
+        style: 'primary',
+      },
     },
-    {
-      type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          action_id: 'open_create_modal',
-          text: { type: 'plain_text', text: '➕ Create meeting' },
-          style: 'primary',
-        },
-      ],
-    },
-    { type: 'divider' },
   ];
 }
 
@@ -38,9 +32,10 @@ export function buildParticipantBlocks(
   meetings: (Meeting & { participant_status: ParticipantStatus })[]
 ): any[] {
   const blocks: any[] = [
+    { type: 'divider' },
     {
-      type: 'section',
-      text: { type: 'mrkdwn', text: '*Your pending actions*' },
+      type: 'header',
+      text: { type: 'plain_text', text: '📋 Your pending actions' },
     },
   ];
 
@@ -53,34 +48,41 @@ export function buildParticipantBlocks(
   }
 
   for (const m of meetings) {
-    const actionLabel = humaniseAction(m.document_action);
     blocks.push(
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*${m.title}*\n*Action:* ${actionLabel} on <${m.document_url}|${m.document_title}>\n*Due:* ${formatStart(m.start_time)}\n*Status:* ${humaniseStatus(m.participant_status)}`,
+          text: `*<${m.document_url}|${m.title}>*`,
         },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Action*\n${humaniseAction(m.document_action)} on <${m.document_url}|${m.document_title}>` },
+          { type: 'mrkdwn', text: `*Status*\n${humaniseStatus(m.participant_status)}` },
+          { type: 'mrkdwn', text: `*Meeting starts*\n${formatStart(m.start_time)}` },
+        ],
       },
       {
         type: 'actions',
         elements: [
           {
             type: 'button',
-            text: { type: 'plain_text', text: 'Mark done' },
+            text: { type: 'plain_text', text: '✅ Mark done' },
             action_id: 'mark_done',
             style: 'primary',
             value: m.id,
           },
           {
             type: 'button',
-            text: { type: 'plain_text', text: 'Need clarification' },
+            text: { type: 'plain_text', text: '❓ Need clarification' },
             action_id: 'need_clarification',
             value: m.id,
           },
           {
             type: 'button',
-            text: { type: 'plain_text', text: 'Cannot complete' },
+            text: { type: 'plain_text', text: '🚫 Cannot complete' },
             action_id: 'cannot_complete',
             style: 'danger',
             value: m.id,
@@ -100,9 +102,10 @@ interface OperatorMeeting extends Meeting {
 
 export function buildOperatorBlocks(meetings: OperatorMeeting[]): any[] {
   const blocks: any[] = [
+    { type: 'divider' },
     {
-      type: 'section',
-      text: { type: 'mrkdwn', text: '*Active meetings*' },
+      type: 'header',
+      text: { type: 'plain_text', text: '🗂 Active meetings' },
     },
   ];
 
@@ -128,12 +131,20 @@ export function buildOperatorBlocks(meetings: OperatorMeeting[]): any[] {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*${m.title}*\n*Starts:* ${formatStart(m.start_time)}\n*Action:* ${humaniseAction(m.document_action)}\n*Progress:* ${progressNote}`,
+          text: `*${m.title}*`,
         },
       },
       {
         type: 'section',
-        text: { type: 'mrkdwn', text: participantLines },
+        fields: [
+          { type: 'mrkdwn', text: `*Action*\n${humaniseAction(m.document_action)}` },
+          { type: 'mrkdwn', text: `*Progress*\n${progressNote}` },
+          { type: 'mrkdwn', text: `*Starts*\n${formatStart(m.start_time)}` },
+        ],
+      },
+      {
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: participantLines }],
       },
       { type: 'divider' }
     );

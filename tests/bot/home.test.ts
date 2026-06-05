@@ -7,16 +7,15 @@ vi.mock('../../src/bot/app', () => ({
 import { buildWelcomeBlocks, buildParticipantBlocks, buildOperatorBlocks } from '../../src/bot/home';
 
 describe('buildWelcomeBlocks', () => {
-  it('returns a section and an actions block', () => {
+  it('returns a section block', () => {
     const blocks = buildWelcomeBlocks();
     expect(blocks.some((b: any) => b.type === 'section')).toBe(true);
-    expect(blocks.some((b: any) => b.type === 'actions')).toBe(true);
   });
 
-  it('actions block contains open_create_modal button', () => {
+  it('section accessory contains open_create_modal button', () => {
     const blocks = buildWelcomeBlocks();
-    const actions = blocks.find((b: any) => b.type === 'actions') as any;
-    expect(actions.elements.some((e: any) => e.action_id === 'open_create_modal')).toBe(true);
+    const section = blocks.find((b: any) => b.type === 'section') as any;
+    expect(section.accessory?.action_id).toBe('open_create_modal');
   });
 });
 
