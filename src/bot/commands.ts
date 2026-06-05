@@ -146,7 +146,7 @@ export function registerCommands(
               text: { type: 'mrkdwn', text: `*Nudge sent to ${sent} participant(s).*${errorNote}` },
             },
             { type: 'divider' },
-            ...blocks,
+            ...(blocks as any[]),
           ],
         });
         break;
