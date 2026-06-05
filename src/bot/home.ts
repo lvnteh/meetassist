@@ -129,9 +129,19 @@ export function buildOperatorBlocks(meetings: OperatorMeeting[]): any[] {
     blocks.push(
       {
         type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*${m.title}*`,
+        text: { type: 'mrkdwn', text: `*${m.title}*` },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: '✖ Close meeting' },
+          action_id: 'home_meeting_close',
+          style: 'danger',
+          value: m.id,
+          confirm: {
+            title: { type: 'plain_text', text: 'Close this meeting?' },
+            text: { type: 'mrkdwn', text: `This will cancel *${m.title}* and cannot be undone.` },
+            confirm: { type: 'plain_text', text: 'Close it' },
+            deny: { type: 'plain_text', text: 'Keep it open' },
+          },
         },
       },
       {
@@ -157,9 +167,7 @@ export function registerHomeTab(meetingService: MeetingService): void {
   const operatorIds = (process.env.OPERATOR_SLACK_IDS ?? process.env.OPERATOR_SLACK_ID ?? '')
     .split(',').map((s) => s.trim()).filter(Boolean);
 
-  app.event('app_home_opened', async ({ event, client }) => {
-    const userId = event.user;
-
+  async function publishHome(userId: string, client: any): Promise<void> {
     const participantMeetings = await meetingService.getActiveMeetingsForParticipant(userId);
     const blocks: any[] = [
       ...buildWelcomeBlocks(),
@@ -187,5 +195,16 @@ export function registerHomeTab(meetingService: MeetingService): void {
       user_id: userId,
       view: { type: 'home', blocks },
     });
+  }
+
+  app.event('app_home_opened', async ({ event, client }) => {
+    await publishHome(event.user, client);
+  });
+
+  app.action('home_meeting_close', async ({ ack, action, body, client }) => {
+    await ack();
+    const meetingId = (action as any).value as string;
+    await meetingService.updateStatus(meetingId, 'cancelled');
+    await publishHome(body.user.id, client);
   });
 }
