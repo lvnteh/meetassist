@@ -162,3 +162,18 @@ describe('MeetingService', () => {
     expect(result).toEqual([]);
   });
 });
+
+describe('MeetingService.getActiveMeetingsForParticipant', () => {
+  it('returns all active meetings for a participant', async () => {
+    const rows = [
+      { id: 'mtg-1', title: 'Meeting 1', status: 'active', participant_status: 'nudge_sent' },
+      { id: 'mtg-2', title: 'Meeting 2', status: 'active', participant_status: 'replied' },
+    ];
+    const mockPool = { query: vi.fn().mockResolvedValue({ rows }) } as any;
+    const svc = new MeetingService(mockPool);
+    const result = await svc.getActiveMeetingsForParticipant('U123');
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe('mtg-1');
+    expect(mockPool.query).toHaveBeenCalledWith(expect.stringContaining('slack_user_id'), ['U123']);
+  });
+});

@@ -171,6 +171,21 @@ export class MeetingService {
     return rows[0] ?? null;
   }
 
+  async getActiveMeetingsForParticipant(slackUserId: string): Promise<(Meeting & { participant_status: ParticipantStatus })[]> {
+    const { rows } = await this.pool.query(
+      `SELECT m.*, mp.status AS participant_status
+       FROM meetings m
+       JOIN meeting_participants mp ON mp.meeting_id = m.id
+       JOIN users u ON u.id = mp.user_id
+       WHERE u.slack_user_id = $1
+         AND m.status IN ('draft','active')
+         AND mp.status != 'completed'
+       ORDER BY m.start_time ASC`,
+      [slackUserId]
+    );
+    return rows;
+  }
+
   async recordDocCheck(meetingId: string, confluenceVersion: number, commentCount: number): Promise<void> {
     await this.pool.query(
       `INSERT INTO doc_checks (id, meeting_id, checked_at, confluence_version, comment_count)
