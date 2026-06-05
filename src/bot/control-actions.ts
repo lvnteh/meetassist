@@ -13,14 +13,13 @@ export function registerControlActions(
   // Lazy-load to avoid eagerly constructing the Bolt App singleton at module load
   const { app } = require('./app') as typeof import('./app');
 
-  app.action('meeting_view_status', async ({ ack, action, respond }) => {
+  app.action('meeting_view_status', async ({ ack, action, client }) => {
     await ack();
     const meetingId = (action as any).value as string;
     const meeting = await meetingService.getById(meetingId);
-    if (!meeting) {
-      await respond({ response_type: 'ephemeral', text: 'Meeting not found.' });
-      return;
-    }
+    if (!meeting) return;
+    const controlChannel = (meeting as any).control_channel_id as string | undefined;
+    if (!controlChannel) return;
     const participants = await meetingService.getParticipantsWithUsers(meetingId);
     const lines = participants.length === 0
       ? ['_No participants._']
@@ -28,8 +27,8 @@ export function registerControlActions(
           const updated = (p as any).completed_at ? relativeTime(new Date((p as any).completed_at)) : '—';
           return `• <@${p.slack_user_id}> — ${humaniseStatus(p.status)} (${updated})`;
         });
-    await respond({
-      response_type: 'ephemeral',
+    await client.chat.postMessage({
+      channel: controlChannel,
       text: `*${meeting.title}* — status\n${lines.join('\n')}`,
     });
   });
@@ -45,11 +44,12 @@ export function registerControlActions(
     });
   });
 
-  app.action('meeting_send_reminder', async ({ ack, action, respond, client }) => {
+  app.action('meeting_send_reminder', async ({ ack, action, client }) => {
     await ack();
     const meetingId = (action as any).value as string;
     const meeting = await meetingService.getById(meetingId);
     if (!meeting) return;
+    const controlChannel = (meeting as any).control_channel_id as string | undefined;
     const participants = await meetingService.getParticipantsWithUsers(meetingId);
     const targets = participants.filter((p) => p.status !== 'completed');
     const text = nudgeService.buildReminderMessage(meeting);
@@ -73,10 +73,12 @@ export function registerControlActions(
         console.error('[reminder] send failed:', err?.message ?? err);
       }
     }
-    await respond({
-      response_type: 'ephemeral',
-      text: `Reminders sent to ${sent} of ${targets.length} participant(s).`,
-    });
+    if (controlChannel) {
+      await client.chat.postMessage({
+        channel: controlChannel,
+        text: `Reminders sent to ${sent} of ${targets.length} participant(s).`,
+      });
+    }
     await updateControlCard(client as any, meetingService, meeting);
   });
 

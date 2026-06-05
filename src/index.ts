@@ -16,6 +16,7 @@ import { startDashboardServer } from './services/dashboard-server';
 import { configureVerification } from './services/verification';
 import { registerModalHandlers } from './bot/modals';
 import { registerControlActions } from './bot/control-actions';
+import { registerHomeTab } from './bot/home';
 import { bootstrapOperatorDms } from './bot/dm-bootstrap';
 
 async function main() {
@@ -41,6 +42,8 @@ async function main() {
     filePath: './dashboard.html',
     port: Number(process.env.PORT ?? 3000),
     token: process.env.DASHBOARD_TOKEN ?? null,
+    meetingService,
+    nudgeService,
   });
 
   configureVerification({
@@ -55,6 +58,7 @@ async function main() {
   registerActions(meetingService, relayService);
   registerModalHandlers(meetingService, confluenceService);
   registerControlActions(meetingService, nudgeService, relayService);
+  registerHomeTab();
   relayService.registerDmListener(meetingService);
 
   startScheduler(meetingService, relayService, app.client);

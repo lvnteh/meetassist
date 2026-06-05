@@ -313,39 +313,47 @@ export function configureDashboard(c: DashboardConfig): void {
   config = c;
 }
 
+export async function fetchDashboardData(
+  meetingService: MeetingService,
+  nudgeService: NudgeService,
+): Promise<DashboardMeeting[]> {
+  const meetings = await meetingService.listActive();
+  const dashboardMeetings: DashboardMeeting[] = [];
+
+  for (const m of meetings) {
+    const participantsRaw = await meetingService.getParticipantsWithUsers(m.id);
+    const participants: DashboardParticipant[] = [];
+    for (const p of participantsRaw as any[]) {
+      const reply = await nudgeService.getLatestReply(m.id, p.user_id);
+      participants.push({
+        slack_user_id: p.slack_user_id,
+        display_name: p.display_name,
+        status: p.status,
+        updated_at: p.updated_at ?? null,
+        latest_reply: reply,
+      });
+    }
+    dashboardMeetings.push({
+      id: m.id,
+      title: m.title,
+      start_time: m.start_time,
+      document_url: m.document_url,
+      document_title: m.document_title,
+      document_action: m.document_action as DocumentAction,
+      purpose: m.purpose,
+      participants,
+    });
+  }
+
+  return dashboardMeetings;
+}
+
 export async function publishDashboard(): Promise<void> {
   if (!config || !config.filePath) return;
 
   try {
-    const meetings = await config.meetingService.listActive();
-    const dashboardMeetings: DashboardMeeting[] = [];
-
-    for (const m of meetings) {
-      const participantsRaw = await config.meetingService.getParticipantsWithUsers(m.id);
-      const participants: DashboardParticipant[] = [];
-      for (const p of participantsRaw as any[]) {
-        const reply = await config.nudgeService.getLatestReply(m.id, p.user_id);
-        participants.push({
-          slack_user_id: p.slack_user_id,
-          display_name: p.display_name,
-          status: p.status,
-          updated_at: p.updated_at ?? null,
-          latest_reply: reply,
-        });
-      }
-      dashboardMeetings.push({
-        id: m.id,
-        title: m.title,
-        start_time: m.start_time,
-        document_url: m.document_url,
-        document_title: m.document_title,
-        document_action: m.document_action as DocumentAction,
-        purpose: m.purpose,
-        participants,
-      });
-    }
-
-    const body = renderDashboardBody({ meetings: dashboardMeetings, now: new Date() });
+    const meetings = await fetchDashboardData(config.meetingService, config.nudgeService);
+    const body = renderDashboardBody({ meetings, now: new Date() });
     await fs.writeFile(config.filePath, body, 'utf8');
   } catch (err: any) {
     console.error('[dashboard] publish failed:', err?.message ?? err);
