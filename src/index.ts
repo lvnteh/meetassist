@@ -36,10 +36,8 @@ async function main() {
     meetingService,
     nudgeService,
   });
-  console.log('[boot] Dashboard will be written to ./dashboard.html');
 
   startDashboardServer({
-    filePath: './dashboard.html',
     port: Number(process.env.PORT ?? 3000),
     token: process.env.DASHBOARD_TOKEN ?? null,
     meetingService,
