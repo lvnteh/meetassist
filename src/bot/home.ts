@@ -1,15 +1,7 @@
 import { app } from './app';
 import type { MeetingService } from '../services/meeting';
-import type { Meeting, ParticipantStatus, DocumentAction } from '../types';
+import type { Meeting, ParticipantStatus } from '../types';
 import { humaniseStatus, humaniseAction } from '../services/dashboard';
-
-const ACTION_LABELS: Record<DocumentAction, string> = {
-  read: 'Read',
-  comment: 'Comment',
-  approve: 'Approve',
-  provide_input: 'Provide input',
-  confirm_decision: 'Confirm decision',
-};
 
 function formatStart(iso: string): string {
   const d = new Date(iso);
@@ -61,7 +53,7 @@ export function buildParticipantBlocks(
   }
 
   for (const m of meetings) {
-    const actionLabel = ACTION_LABELS[m.document_action] ?? m.document_action;
+    const actionLabel = humaniseAction(m.document_action);
     blocks.push(
       {
         type: 'section',
@@ -171,8 +163,8 @@ export function registerHomeTab(meetingService: MeetingService): void {
         operatorMeetings.push({
           ...m,
           participants: participants.map((p) => ({
-            display_name: (p as any).display_name,
-            slack_user_id: (p as any).slack_user_id,
+            display_name: p.display_name,
+            slack_user_id: p.slack_user_id,
             status: p.status,
           })),
         });
