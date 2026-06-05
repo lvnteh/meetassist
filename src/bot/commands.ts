@@ -168,10 +168,10 @@ export function registerCommands(
           return;
         }
 
-        const text = nudgeService.buildReminderMessage(meeting);
+        const msg = nudgeService.buildReminderMessage(meeting);
         let sent = 0;
         for (const p of participants) {
-          const { channel, ts } = await relayService.sendToParticipant({ slackUserId: p.slack_user_id, text });
+          const { channel, ts } = await relayService.sendBlocksToParticipant({ slackUserId: p.slack_user_id, text: msg.text, blocks: msg.blocks });
           await nudgeService.recordNudge({
             user_id: p.user_id,
             meeting_id: meetingId,
@@ -203,10 +203,10 @@ export function registerCommands(
           return;
         }
 
-        const text = nudgeService.buildFollowUpMessage(meeting);
+        const msg = nudgeService.buildFollowUpMessage(meeting);
         let sent = 0;
         for (const p of participants) {
-          const { channel, ts } = await relayService.sendToParticipant({ slackUserId: p.slack_user_id, text });
+          const { channel, ts } = await relayService.sendBlocksToParticipant({ slackUserId: p.slack_user_id, text: msg.text, blocks: msg.blocks });
           await nudgeService.recordNudge({
             user_id: p.user_id,
             meeting_id: meetingId,

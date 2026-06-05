@@ -75,35 +75,37 @@ describe('NudgeService.buildPreMeetingMessage', () => {
 describe('NudgeService.buildReminderMessage', () => {
   it('contains action label, document title, url, and meeting label', () => {
     const service = new NudgeService(makePool());
-    const text = service.buildReminderMessage(baseMeeting);
-    expect(text).toContain('Add a comment or mark no concerns');
-    expect(text).toContain('Q3 Roadmap');
-    expect(text).toContain('https://example.atlassian.net/wiki/spaces/X/pages/12345/Page');
-    expect(text).toContain('Meeting: Q3 Planning');
+    const msg = service.buildReminderMessage(baseMeeting);
+    const allText = JSON.stringify(msg);
+    expect(allText).toContain('Add a comment or mark no concerns');
+    expect(allText).toContain('Q3 Roadmap');
+    expect(allText).toContain('https://example.atlassian.net/wiki/spaces/X/pages/12345/Page');
+    expect(allText).toContain('Meeting: Q3 Planning');
   });
 
   it('does not include purpose', () => {
     const service = new NudgeService(makePool());
-    const text = service.buildReminderMessage(baseMeeting);
-    expect(text).not.toContain(baseMeeting.purpose);
+    const msg = service.buildReminderMessage(baseMeeting);
+    expect(JSON.stringify(msg)).not.toContain(baseMeeting.purpose);
   });
 });
 
 describe('NudgeService.buildFollowUpMessage', () => {
   it('contains still open, action label, document title, url, and meeting label', () => {
     const service = new NudgeService(makePool());
-    const text = service.buildFollowUpMessage(baseMeeting);
-    expect(text).toContain('still open');
-    expect(text).toContain('Add a comment or mark no concerns');
-    expect(text).toContain('Q3 Roadmap');
-    expect(text).toContain('https://example.atlassian.net/wiki/spaces/X/pages/12345/Page');
-    expect(text).toContain('Meeting: Q3 Planning');
+    const msg = service.buildFollowUpMessage(baseMeeting);
+    const allText = JSON.stringify(msg);
+    expect(allText).toContain('still open');
+    expect(allText).toContain('Add a comment or mark no concerns');
+    expect(allText).toContain('Q3 Roadmap');
+    expect(allText).toContain('https://example.atlassian.net/wiki/spaces/X/pages/12345/Page');
+    expect(allText).toContain('Meeting: Q3 Planning');
   });
 
   it('does not include purpose', () => {
     const service = new NudgeService(makePool());
-    const text = service.buildFollowUpMessage(baseMeeting);
-    expect(text).not.toContain(baseMeeting.purpose);
+    const msg = service.buildFollowUpMessage(baseMeeting);
+    expect(JSON.stringify(msg)).not.toContain(baseMeeting.purpose);
   });
 });
 

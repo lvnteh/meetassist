@@ -99,14 +99,97 @@ export class NudgeService {
     return { text, blocks };
   }
 
-  buildReminderMessage(meeting: Meeting): string {
+  buildReminderMessage(meeting: Meeting): SlackMessage {
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    return `Reminder: ${actionLabel} on ${escapeForSlack(meeting.document_title)}.\nMeeting: ${escapeForSlack(meeting.title)}\n${meeting.document_url}`;
+    const text = `Reminder: ${actionLabel} on ${escapeForSlack(meeting.document_title)}. Meeting: ${escapeForSlack(meeting.title)}`;
+    return {
+      text,
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Reminder:* ${actionLabel}\nMeeting: ${escapeForSlack(meeting.title)}` },
+        },
+        ...this._docAndActions(meeting),
+      ],
+    };
   }
 
-  buildFollowUpMessage(meeting: Meeting): string {
+  buildFollowUpMessage(meeting: Meeting): SlackMessage {
     const actionLabel = ACTION_LABELS[meeting.document_action] ?? meeting.document_action;
-    return `Your action is still open: ${actionLabel} on ${escapeForSlack(meeting.document_title)}.\nMeeting: ${escapeForSlack(meeting.title)}\n${meeting.document_url}`;
+    const text = `Your action is still open: ${actionLabel} on ${escapeForSlack(meeting.document_title)}. Meeting: ${escapeForSlack(meeting.title)}`;
+    return {
+      text,
+      blocks: [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Your action is still open:* ${actionLabel}\nMeeting: ${escapeForSlack(meeting.title)}` },
+        },
+        ...this._docAndActions(meeting),
+      ],
+    };
+  }
+
+  buildVerificationNudgeMessage(meeting: Meeting): SlackMessage {
+    const actionLabel = humaniseActionForVerification(meeting.document_action);
+    const text = `Just checking — your action for *${escapeForSlack(meeting.title)}* was to ${actionLabel}, but I don't see it on the doc yet. Could you take a moment to follow up?`;
+    return {
+      text,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `Just checking — your action for *${escapeForSlack(meeting.title)}* was to ${actionLabel}, but I don't see it on the doc yet. Could you take a moment to follow up?`,
+          },
+        },
+        ...(meeting.purpose ? [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `> ${escapeForSlack(meeting.purpose)}` },
+        }] : []),
+        ...this._docAndActions(meeting),
+      ],
+    };
+  }
+
+  private _docAndActions(meeting: Meeting): object[] {
+    return [
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Open document' },
+            action_id: 'open_document',
+            url: meeting.document_url,
+          },
+        ],
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Mark done' },
+            action_id: 'mark_done',
+            style: 'primary',
+            value: meeting.id,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Need clarification' },
+            action_id: 'need_clarification',
+            value: meeting.id,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Cannot complete' },
+            action_id: 'cannot_complete',
+            style: 'danger',
+            value: meeting.id,
+          },
+        ],
+      },
+    ];
   }
 
   async recordParticipantMessage(input: ParticipantMessageInput): Promise<ParticipantMessage> {
@@ -139,5 +222,15 @@ export class NudgeService {
       `INSERT INTO operator_replies (id, participant_message_id, raw_text, sent_at) VALUES ($1,$2,$3,$4)`,
       [id, participantMessageId, rawText, sent_at]
     );
+  }
+}
+
+function humaniseActionForVerification(action: string): string {
+  switch (action) {
+    case 'comment':           return 'comment';
+    case 'provide_input':     return 'provide input';
+    case 'approve':           return 'approve';
+    case 'confirm_decision':  return 'confirm the decision';
+    default:                  return action;
   }
 }

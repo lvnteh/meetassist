@@ -15,10 +15,15 @@ function makeDeps(overrides: any = {}) {
   };
   const relayService = {
     sendToParticipant: vi.fn().mockResolvedValue({ channel: 'D1', ts: '1.0' }),
+    sendBlocksToParticipant: vi.fn().mockResolvedValue({ channel: 'D1', ts: '1.0' }),
     ...overrides.relayService,
   };
   const nudgeService = {
     recordNudge: vi.fn().mockResolvedValue(undefined),
+    buildVerificationNudgeMessage: vi.fn().mockReturnValue({
+      text: 'Just checking — your action for *Take Template Ownership* was to comment',
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: 'Just checking...' } }],
+    }),
     ...overrides.nudgeService,
   };
   const slackClient = {
@@ -286,11 +291,10 @@ describe('verification button handlers', () => {
 
     await handleVerificationNudgeYes('m1|u1', respond);
 
-    expect(deps.relayService.sendToParticipant).toHaveBeenCalledTimes(1);
-    const sendArgs = deps.relayService.sendToParticipant.mock.calls[0][0];
+    expect(deps.relayService.sendBlocksToParticipant).toHaveBeenCalledTimes(1);
+    const sendArgs = deps.relayService.sendBlocksToParticipant.mock.calls[0][0];
     expect(sendArgs.slackUserId).toBe('U_ALICE');
     expect(sendArgs.text).toContain('Take Template Ownership');
-    expect(sendArgs.text).toContain('https://x.example/doc');
 
     expect(deps.nudgeService.recordNudge).toHaveBeenCalledTimes(1);
     const recordArgs = deps.nudgeService.recordNudge.mock.calls[0][0];
@@ -317,7 +321,7 @@ describe('verification button handlers', () => {
     });
     configureVerification(deps as any);
     await handleVerificationNudgeYes('m1|u1', respond);
-    expect(deps.relayService.sendToParticipant).not.toHaveBeenCalled();
+    expect(deps.relayService.sendBlocksToParticipant).not.toHaveBeenCalled();
     expect(deps.nudgeService.recordNudge).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
   });
@@ -332,7 +336,7 @@ describe('verification button handlers', () => {
     });
     configureVerification(deps as any);
     await handleVerificationNudgeYes('m1|u1', respond);
-    expect(deps.relayService.sendToParticipant).not.toHaveBeenCalled();
+    expect(deps.relayService.sendBlocksToParticipant).not.toHaveBeenCalled();
     expect(respond).not.toHaveBeenCalled();
   });
 
@@ -362,7 +366,8 @@ describe('verification button handlers', () => {
 
     await handleVerificationNudgeYes('m1|u1', respond);
 
-    const sendArgs = deps.relayService.sendToParticipant.mock.calls[0][0];
-    expect(sendArgs.text).toContain('The ask was: Review the proposed roadmap before Friday');
+    expect(deps.nudgeService.buildVerificationNudgeMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: 'Review the proposed roadmap before Friday' })
+    );
   });
 });

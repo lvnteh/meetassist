@@ -52,13 +52,14 @@ export function registerControlActions(
     const controlChannel = (meeting as any).control_channel_id as string | undefined;
     const participants = await meetingService.getParticipantsWithUsers(meetingId);
     const targets = participants.filter((p) => p.status !== 'completed');
-    const text = nudgeService.buildReminderMessage(meeting);
+    const msg = nudgeService.buildReminderMessage(meeting);
     let sent = 0;
     for (const p of targets) {
       try {
-        const { channel, ts } = await relayService.sendToParticipant({
+        const { channel, ts } = await relayService.sendBlocksToParticipant({
           slackUserId: p.slack_user_id,
-          text,
+          text: msg.text,
+          blocks: msg.blocks,
         });
         await nudgeService.recordNudge({
           user_id: p.user_id,

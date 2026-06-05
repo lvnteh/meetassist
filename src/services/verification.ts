@@ -96,6 +96,10 @@ export async function runVerification(meetingId: string, userId: string): Promis
   }
 }
 
+export function escapeForSlack(s: string): string {
+  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function humaniseActionForDm(action: string): string {
   switch (action) {
     case 'comment':           return 'comment';
@@ -104,10 +108,6 @@ function humaniseActionForDm(action: string): string {
     case 'confirm_decision':  return 'decision';
     default:                  return action;
   }
-}
-
-export function escapeForSlack(s: string): string {
-  return (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 type RespondFn = (args: { replace_original?: boolean; text?: string; blocks?: any[] }) => Promise<unknown>;
@@ -125,16 +125,12 @@ export async function handleVerificationNudgeYes(value: string, respond: Respond
     const participant = (participants as any[]).find((p) => p.user_id === userId);
     if (!participant) return;
 
-    const actionLabel = humaniseActionForDm(meeting.document_action);
-    const text =
-      `Meetassist: Just checking — your action for *${escapeForSlack(meeting.title)}* was to ${actionLabel}, ` +
-      `but I don't see it on the doc yet. Could you take a moment to follow up?\n\n` +
-      `The ask was: ${escapeForSlack(meeting.purpose)}\n\n` +
-      `${meeting.document_url}`;
+    const msg = deps.nudgeService.buildVerificationNudgeMessage(meeting);
 
-    const { channel, ts } = await deps.relayService.sendToParticipant({
+    const { channel, ts } = await deps.relayService.sendBlocksToParticipant({
       slackUserId: participant.slack_user_id,
-      text,
+      text: msg.text,
+      blocks: msg.blocks,
     });
     await deps.nudgeService.recordNudge({
       user_id: userId,
