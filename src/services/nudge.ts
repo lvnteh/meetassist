@@ -54,7 +54,7 @@ export class NudgeService {
 
     const text = `${actionLabel} on ${meeting.document_title} — ${meeting.title}. Due ${dateStr} ${timeStr}.`;
 
-    const blocks = [
+    const blocks: object[] = [
       {
         type: 'section',
         text: {
@@ -62,6 +62,13 @@ export class NudgeService {
           text: `_ACTION NEEDED BY ${dateStr} · ${timeStr}_\n*${actionLabel}* on <${meeting.document_url}|${escapeForSlack(meeting.document_title)}>\nMeeting: ${escapeForSlack(meeting.title)}`,
         },
       },
+      ...(meeting.purpose ? [{
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `> ${escapeForSlack(meeting.purpose)}`,
+        },
+      }] : []),
       {
         type: 'actions',
         elements: [

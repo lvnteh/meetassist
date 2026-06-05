@@ -6,44 +6,6 @@ function makePool(rows: any[] = []) {
   return { query: vi.fn().mockResolvedValue({ rows }) } as any;
 }
 
-// NudgeService message builders are pure functions — test them without a DB
-const mockMeeting = {
-  id: 'meeting-1',
-  title: 'Roadmap Review',
-  start_time: '2026-06-01T09:00:00Z',
-  organizer_user_id: 'user-1',
-  purpose: 'Align Q3',
-  document_url: 'https://org.atlassian.net/wiki/spaces/P/pages/1/Doc',
-  document_title: 'Q3 Roadmap',
-  document_action: 'comment',
-  confluence_page_id: '1',
-  status: 'active',
-  created_at: '2026-05-01T00:00:00Z',
-} as any;
-
-const nudgeService = new NudgeService(null as any);
-
-describe('NudgeService message builders', () => {
-  it('buildPreMeetingMessage includes title and document', () => {
-    const { text, blocks } = nudgeService.buildPreMeetingMessage(mockMeeting);
-    expect(text).toContain('Roadmap Review');
-    expect(text).toContain('Q3 Roadmap');
-    expect(blocks).toBeDefined();
-  });
-
-  it('buildReminderMessage returns plain text with document link', () => {
-    const text = nudgeService.buildReminderMessage(mockMeeting);
-    expect(text).toContain('Roadmap Review');
-    expect(text).toContain('https://org.atlassian.net');
-  });
-
-  it('buildFollowUpMessage references the document action', () => {
-    const text = nudgeService.buildFollowUpMessage(mockMeeting);
-    expect(text).toContain('Roadmap Review');
-    expect(text).toContain('comment');
-  });
-});
-
 const baseMeeting: Meeting = {
   id: 'm1',
   title: 'Q3 Planning',
@@ -59,45 +21,89 @@ const baseMeeting: Meeting = {
 } as any;
 
 describe('NudgeService.buildPreMeetingMessage', () => {
-  it('includes the meeting purpose between intro and requested checklist', () => {
+  it('leads with action label and document link, not purpose', () => {
     const service = new NudgeService(makePool());
     const msg = service.buildPreMeetingMessage(baseMeeting);
-
-    expect(msg.text).toContain('Review the proposed roadmap and flag anything blocking your team');
-    const introIdx = msg.text.indexOf('needs your async input');
-    const purposeIdx = msg.text.indexOf('Review the proposed roadmap');
-    const requestedIdx = msg.text.indexOf('Requested:');
-    expect(introIdx).toBeGreaterThanOrEqual(0);
-    expect(purposeIdx).toBeGreaterThan(introIdx);
-    expect(requestedIdx).toBeGreaterThan(purposeIdx);
-
     const blockText = (msg.blocks[0] as any).text.text;
-    expect(blockText).toContain('Review the proposed roadmap');
+
+    expect(blockText).toContain('Add a comment or mark no concerns');
+    expect(blockText).toContain('Q3 Roadmap');
+    expect(blockText).toContain('Meeting: Q3 Planning');
+    expect(blockText).not.toContain(baseMeeting.purpose);
+    expect(blockText).not.toContain('Requested:');
+    expect(blockText).not.toContain('Meetassist:');
+    expect(blockText).not.toContain('Confirm when done');
+    expect(blockText).toContain('<https://example.atlassian.net/wiki/spaces/X/pages/12345/Page|Q3 Roadmap>');
   });
 
-  it('escapes &, <, > in purpose', () => {
+  it('includes deadline in block text', () => {
     const service = new NudgeService(makePool());
-    const meeting = { ...baseMeeting, purpose: 'A & B <script>' };
-    const msg = service.buildPreMeetingMessage(meeting);
+    const msg = service.buildPreMeetingMessage(baseMeeting);
     const blockText = (msg.blocks[0] as any).text.text;
-    expect(blockText).toContain('A &amp; B &lt;script&gt;');
-    expect(blockText).not.toContain('A & B <script>');
+    expect(blockText).toMatch(/ACTION NEEDED BY/i);
+    expect(blockText).toContain('Jun');
+  });
+
+  it('fallback text contains action, document title, meeting title, and deadline', () => {
+    const service = new NudgeService(makePool());
+    const msg = service.buildPreMeetingMessage(baseMeeting);
+    expect(msg.text).toContain('Add a comment or mark no concerns');
+    expect(msg.text).toContain('Q3 Roadmap');
+    expect(msg.text).toContain('Q3 Planning');
+    expect(msg.text).toContain('Jun');
+  });
+
+  it('has three blocks when purpose is set: section, context, actions', () => {
+    const service = new NudgeService(makePool());
+    const msg = service.buildPreMeetingMessage(baseMeeting);
+    expect(msg.blocks).toHaveLength(3);
+    expect((msg.blocks[0] as any).type).toBe('section');
+    expect((msg.blocks[1] as any).type).toBe('section');
+    expect((msg.blocks[1] as any).text.text).toContain(baseMeeting.purpose);
+    expect((msg.blocks[2] as any).type).toBe('actions');
+  });
+
+  it('has two blocks when purpose is empty: section and actions', () => {
+    const service = new NudgeService(makePool());
+    const msg = service.buildPreMeetingMessage({ ...baseMeeting, purpose: '' });
+    expect(msg.blocks).toHaveLength(2);
+    expect((msg.blocks[0] as any).type).toBe('section');
+    expect((msg.blocks[1] as any).type).toBe('actions');
   });
 });
 
 describe('NudgeService.buildReminderMessage', () => {
-  it('includes the meeting purpose', () => {
+  it('contains action label, document title, url, and meeting label', () => {
     const service = new NudgeService(makePool());
     const text = service.buildReminderMessage(baseMeeting);
-    expect(text).toContain('Review the proposed roadmap');
+    expect(text).toContain('Add a comment or mark no concerns');
+    expect(text).toContain('Q3 Roadmap');
+    expect(text).toContain('https://example.atlassian.net/wiki/spaces/X/pages/12345/Page');
+    expect(text).toContain('Meeting: Q3 Planning');
+  });
+
+  it('does not include purpose', () => {
+    const service = new NudgeService(makePool());
+    const text = service.buildReminderMessage(baseMeeting);
+    expect(text).not.toContain(baseMeeting.purpose);
   });
 });
 
 describe('NudgeService.buildFollowUpMessage', () => {
-  it('includes the meeting purpose', () => {
+  it('contains still open, action label, document title, url, and meeting label', () => {
     const service = new NudgeService(makePool());
     const text = service.buildFollowUpMessage(baseMeeting);
-    expect(text).toContain('Review the proposed roadmap');
+    expect(text).toContain('still open');
+    expect(text).toContain('Add a comment or mark no concerns');
+    expect(text).toContain('Q3 Roadmap');
+    expect(text).toContain('https://example.atlassian.net/wiki/spaces/X/pages/12345/Page');
+    expect(text).toContain('Meeting: Q3 Planning');
+  });
+
+  it('does not include purpose', () => {
+    const service = new NudgeService(makePool());
+    const text = service.buildFollowUpMessage(baseMeeting);
+    expect(text).not.toContain(baseMeeting.purpose);
   });
 });
 
@@ -105,9 +111,7 @@ describe('NudgeService.getLatestReply', () => {
   it('returns the most recent participant message text', async () => {
     const pool = makePool([{ raw_text: 'looks good' }]);
     const service = new NudgeService(pool);
-
     const reply = await service.getLatestReply('mtg-1', 'user-1');
-
     expect(reply).toBe('looks good');
     const sql = pool.query.mock.calls[0][0];
     expect(sql).toContain('participant_messages');
@@ -119,9 +123,7 @@ describe('NudgeService.getLatestReply', () => {
   it('returns null when no messages exist', async () => {
     const pool = makePool([]);
     const service = new NudgeService(pool);
-
     const reply = await service.getLatestReply('mtg-1', 'user-1');
-
     expect(reply).toBeNull();
   });
 });
