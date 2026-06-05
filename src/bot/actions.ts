@@ -1,12 +1,15 @@
 import { app } from './app';
 import type { MeetingService } from '../services/meeting';
+import type { NudgeService } from '../services/nudge';
 import type { RelayService } from './relay';
+import { buildMessageOrganiserModal } from './modals';
 import { publishDashboard } from '../services/dashboard';
 import { updateControlCard } from './control-card';
 import { handleVerificationNudgeYes, handleVerificationNudgeSkip, scheduleVerification } from '../services/verification';
 
 export function registerActions(
   meetingService: MeetingService,
+  nudgeService: NudgeService,
   relayService: RelayService
 ): void {
   app.action('mark_done', async ({ ack, body, action }) => {
@@ -119,5 +122,16 @@ export function registerActions(
     await ack();
     const value = (action as any).value as string;
     await handleVerificationNudgeSkip(value, respond as any);
+  });
+
+  app.action('message_organiser', async ({ ack, body, action, client }) => {
+    await ack();
+    const meetingId = (action as any).value as string;
+    const meeting = await meetingService.getById(meetingId);
+    if (!meeting) return;
+    await client.views.open({
+      trigger_id: (body as any).trigger_id,
+      view: buildMessageOrganiserModal(meeting.title, meetingId),
+    });
   });
 }

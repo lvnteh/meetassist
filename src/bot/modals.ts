@@ -1,3 +1,9 @@
+import type { MeetingService } from '../services/meeting';
+import type { NudgeService } from '../services/nudge';
+import type { ConfluenceService } from '../services/confluence';
+import type { RelayService } from './relay';
+import { postControlCard, updateControlCard } from './control-card';
+
 const ACTION_OPTIONS = [
   { value: 'read', label: 'Read' },
   { value: 'comment', label: 'Comment' },
@@ -64,6 +70,29 @@ export function buildCreateMeetingModal(): any {
   };
 }
 
+export function buildMessageOrganiserModal(meetingTitle: string, meetingId: string): any {
+  return {
+    type: 'modal',
+    callback_id: 'message_organiser_modal',
+    private_metadata: meetingId,
+    title: { type: 'plain_text', text: 'Message organiser' },
+    submit: { type: 'plain_text', text: 'Send' },
+    close: { type: 'plain_text', text: 'Cancel' },
+    blocks: [
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: `Re: *${meetingTitle}*\nYour message will be forwarded to the meeting organiser.` },
+      },
+      {
+        type: 'input',
+        block_id: 'message',
+        label: { type: 'plain_text', text: 'Your message' },
+        element: { type: 'plain_text_input', action_id: 'value', multiline: true },
+      },
+    ],
+  };
+}
+
 export function buildChangeActionModal(meetingId: string, currentAction: string): any {
   const initial = actionOptions().find((o) => o.value === currentAction);
   return {
@@ -89,13 +118,11 @@ export function buildChangeActionModal(meetingId: string, currentAction: string)
   };
 }
 
-import type { MeetingService } from '../services/meeting';
-import type { ConfluenceService } from '../services/confluence';
-import { postControlCard, updateControlCard } from './control-card';
-
 export function registerModalHandlers(
   meetingService: MeetingService,
   confluenceService: ConfluenceService,
+  nudgeService: NudgeService,
+  relayService: RelayService,
 ): void {
   // Lazy-load modules whose own imports eagerly construct the Bolt App
   // singleton — keeps this module importable from tests that exercise only
@@ -193,6 +220,41 @@ export function registerModalHandlers(
       }
     } catch (err: any) {
       console.error('[modal] change_action_modal handler failed:', err?.message ?? err);
+    }
+  });
+
+  // Handle message-organiser modal submission
+  app.view('message_organiser_modal', async ({ ack, body, view }) => {
+    await ack();
+    const meetingId = view.private_metadata;
+    const text: string = (view.state.values as any).message?.value?.value?.trim() ?? '';
+    const slackUserId = body.user.id;
+    if (!meetingId || !text) return;
+
+    try {
+      const meeting = await meetingService.getById(meetingId);
+      if (!meeting) return;
+
+      const user = await meetingService.getUserBySlackId(slackUserId);
+      if (!user) return;
+
+      const msg = await nudgeService.recordParticipantMessage({
+        user_id: user.id,
+        meeting_id: meetingId,
+        nudge_id: null,
+        raw_text: text,
+      });
+
+      await meetingService.updateParticipantStatus(meetingId, user.id, 'replied');
+
+      await relayService.forwardToOrganiser({
+        senderSlackId: slackUserId,
+        text,
+        meetingTitle: meeting.title,
+        participantMessageId: msg.id,
+      });
+    } catch (err: any) {
+      console.error('[modal] message_organiser_modal handler failed:', err?.message ?? err);
     }
   });
 }

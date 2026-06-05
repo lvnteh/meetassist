@@ -21,6 +21,19 @@ export class RelayService {
     });
   }
 
+  async forwardToOrganiser(params: {
+    senderSlackId: string;
+    text: string;
+    meetingTitle: string;
+    participantMessageId: string;
+  }): Promise<void> {
+    const operatorId = process.env.OPERATOR_SLACK_ID!;
+    await app.client.chat.postMessage({
+      channel: operatorId,
+      text: `[Meetassist] <@${params.senderSlackId}> sent you a message about *${params.meetingTitle}*:\n> ${params.text}\n\nReply: \`/ma reply @${params.senderSlackId} <your message>\``,
+    });
+  }
+
   async sendToParticipant(params: {
     slackUserId: string;
     text: string;

@@ -187,6 +187,12 @@ export class NudgeService {
             style: 'danger',
             value: meeting.id,
           },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Message organiser' },
+            action_id: 'message_organiser',
+            value: meeting.id,
+          },
         ],
       },
     ];

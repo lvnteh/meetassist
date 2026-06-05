@@ -53,8 +53,8 @@ async function main() {
   });
 
   registerCommands(meetingService, nudgeService, relayService, confluenceService);
-  registerActions(meetingService, relayService);
-  registerModalHandlers(meetingService, confluenceService);
+  registerActions(meetingService, nudgeService, relayService);
+  registerModalHandlers(meetingService, confluenceService, nudgeService, relayService);
   registerControlActions(meetingService, nudgeService, relayService);
   registerHomeTab(meetingService);
   relayService.registerDmListener(meetingService);
