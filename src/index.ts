@@ -58,7 +58,7 @@ async function main() {
   registerActions(meetingService, relayService);
   registerModalHandlers(meetingService, confluenceService);
   registerControlActions(meetingService, nudgeService, relayService);
-  registerHomeTab();
+  registerHomeTab(meetingService);
   relayService.registerDmListener(meetingService);
 
   startScheduler(meetingService, relayService, app.client);
